@@ -1,0 +1,11 @@
+rapidocr-onnxruntime
+opencv-python
+numpy
+Pillow
+mss
+pyautogui
+keyboard
+pynput
+accessible-output2
+pywin32
+wxPython
