@@ -4,11 +4,7 @@ opencv-python
 numpy
 Pillow
 mss
-pyautogui
-pynput
 keyboard
 accessible-output2
 pywin32
 wxPython
-huggingface_hub
-requests
