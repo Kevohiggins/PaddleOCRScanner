@@ -136,6 +136,12 @@ class ElementNavigator:
         hooks.append(('hotkey', keyboard.add_hotkey("shift+f10", on_select_right, suppress=True)))
         
         hooks.append(('key', keyboard.on_press_key("escape", on_cancel, suppress=True)))
+        
+        # Bloquear Alt+Tab y tecla Windows durante la navegación para no perder el foco
+        hooks.append(('hotkey', keyboard.add_hotkey("alt+tab", lambda: None, suppress=True)))
+        hooks.append(('key', keyboard.on_press_key("windows", lambda e: None, suppress=True)))
+        hooks.append(('key', keyboard.on_press_key("left windows", lambda e: None, suppress=True)))
+        hooks.append(('key', keyboard.on_press_key("right windows", lambda e: None, suppress=True)))
 
         try:
             while active:

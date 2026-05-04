@@ -3,18 +3,24 @@ import os
 import sys
 import wx
 
-CONFIG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json")
+def get_base_path():
+    if getattr(sys, 'frozen', False):
+        return os.path.dirname(sys.executable)
+    # Si estamos en src/, subimos un nivel para la raíz
+    return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+CONFIG_FILE = os.path.join(get_base_path(), "config.json")
 
 DEFAULT_CONFIG = {
-    "min_confidence": 0.5,
+    "ocr_language": "latin",
+    "min_confidence": 0.3,
+    "use_gpu": True,
+    "image_scale": 0.5,
     "hotkey_screen": "ctrl+alt+s",
     "hotkey_window": "ctrl+alt+w",
     "hotkey_config": "ctrl+shift+c",
     "hotkey_quit": "ctrl+alt+q",
     "row_tolerance": 20,
-    "det_model": "",
-    "rec_model": "",
-    "rec_keys": "",
     "dynamic_interval": 1.0,
     "hotkey_dynamic": "ctrl+alt+d",
     "dynamic_target": "screen",

@@ -1,11 +1,14 @@
-rapidocr-onnxruntime
+rapidocr-openvino
+openvino==2024.6.0
 opencv-python
 numpy
 Pillow
 mss
 pyautogui
-keyboard
 pynput
+keyboard
 accessible-output2
 pywin32
 wxPython
+huggingface_hub
+requests

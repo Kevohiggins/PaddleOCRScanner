@@ -25,7 +25,7 @@ class NativeConfigDialog(wx.Dialog):
         header.SetBackgroundColour(wx.Colour(0, 120, 215))
         h_sizer = wx.BoxSizer(wx.VERTICAL)
 
-        t = wx.StaticText(header, label="Configuración de SpectrOCR")
+        t = wx.StaticText(header, label="Configuración de PaddleOCR Scanner")
         t.SetForegroundColour(wx.WHITE)
         f = t.GetFont()
         f.SetPointSize(16)
@@ -157,6 +157,27 @@ class NativeConfigDialog(wx.Dialog):
             scale_choices, scale_idx,
             "Reducir la resolución acelera el proceso pero puede perder letras muy chicas.")
 
+        lang_choices = [
+            "Latino (Español, Inglés, etc.)",
+            "Japonés / Chino",
+            "Coreano",
+            "Cirílico (Ruso, Ucraniano, etc.)",
+            "Tailandés",
+            "Árabe (Árabe, Urdu, Persa)",
+            "Hindi (Hindi, Marathi, Nepalí)"
+        ]
+        lang_val = self.config.get("ocr_language", "latin")
+        lang_map = {
+            "latin": 0, "japanese": 1, "chinese": 1, "korean": 2, 
+            "cyrillic": 3, "thai": 4, "arabic": 5, "hindi": 6
+        }
+        lang_idx = lang_map.get(lang_val, 0)
+        
+        self.lang_choice = add_choice(scroll, g2,
+            "Idioma del OCR",
+            lang_choices, lang_idx,
+            "Seleccioná el modelo optimizado para el idioma que quieras leer.")
+
         s2.Add(g2, 1, wx.EXPAND | wx.ALL, 10)
         content.Add(s2, 0, wx.EXPAND | wx.TOP, 15)
 
@@ -273,6 +294,9 @@ class NativeConfigDialog(wx.Dialog):
         self.config["min_confidence"] = self.min_conf.GetValue()
         self.config["row_tolerance"] = self.row_tol.GetValue()
         self.config["image_scale"] = float(scale_map[self.scale.GetSelection()])
+        
+        lang_map_inv = {0: "latin", 1: "japanese", 2: "korean", 3: "cyrillic", 4: "thai", 5: "arabic", 6: "hindi"}
+        self.config["ocr_language"] = lang_map_inv[self.lang_choice.GetSelection()]
 
         self.config["hotkey_dynamic"] = self.hk_dynamic.GetValue()
         self.config["dynamic_interval"] = self.dyn_interval.GetValue()
@@ -298,7 +322,7 @@ def show_config_window(current_config=None):
         app = wx.App(False)
 
     config_to_edit = current_config if current_config else load_config()
-    dlg = NativeConfigDialog(None, "Configuración SpectrOCR", config_to_edit)
+    dlg = NativeConfigDialog(None, "Configuración PaddleOCR Scanner", config_to_edit)
 
     result = None
     if dlg.ShowModal() == wx.ID_OK:
