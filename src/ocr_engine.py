@@ -91,12 +91,16 @@ class OCREngine:
         }
 
         # Configurar Detector
-        # Si es v3 (Arabe, Hindi), forzamos su detector v3 para compatibilidad
         if is_v3 and os.path.exists(det_model_path_v3):
             ocr_kwargs["det_model_path"] = det_model_path_v3
             logger.info("OCREngine: Usando detector v3 local [%s]", lang)
-        # Para v5 (Latin, Chino, etc.), NO forzamos ruta. 
-        # Dejamos que RapidOCR use su detector interno optimizado para maxima velocidad.
+        # elif not is_v3 and os.path.exists(det_model_path_v5):
+        #     # COMENTADO: Demasiado lento (5-6s). Usar solo si se necesita precisión extrema.
+        #     ocr_kwargs["det_model_path"] = det_model_path_v5
+        #     logger.info("OCREngine: Usando detector v5 local (Calidad Máxima)")
+        else:
+            # Usar detector interno de la librería (Mobile V4) - Rápido y preciso
+            logger.info("OCREngine: Usando detector interno de la librería (Mobile V4)")
 
         # Configurar Reconocedor (Usamos el nuestro para asegurar Ñ y tildes)
         if os.path.exists(rec_model_path) and os.path.exists(rec_keys_path):

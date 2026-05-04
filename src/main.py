@@ -29,6 +29,8 @@ from shadow_manager import ShadowManager
 import keyboard
 import win32gui
 import win32process
+import cv2
+import numpy as np
 
 # Configurar logging
 logging.basicConfig(
@@ -92,6 +94,7 @@ class PaddleOCRScanner:
         
         self.is_dynamic_running = False
         self.dynamic_thread = None
+        self._prev_dynamic_image = None
         self.app = None
         self._last_reset_time = 0
 
@@ -215,6 +218,7 @@ class PaddleOCRScanner:
         self._update_current_app()
         if self.is_dynamic_running:
             self.is_dynamic_running = False
+            self._prev_dynamic_image = None # Limpiar caché al apagar
             self.tts.play_error() # Tono bajo para indicar que se apagó
             self.tts.speak("Escaneo dinámico desactivado.", interrupt=True)
         else:
@@ -238,8 +242,14 @@ class PaddleOCRScanner:
             interval = float(self.config.get("dynamic_interval", 1.0))
             target = self.config.get("dynamic_target", "screen")
             sensitivity = float(self.config.get("dynamic_sensitivity", 50))
-            threshold = sensitivity / 100.0
             
+            # Umbral de texto: a más sensibilidad, más fácil es que hable (threshold más alto)
+            text_threshold = sensitivity / 100.0
+            
+            # Umbral de imagen: a más sensibilidad, menos cambio hace falta para disparar OCR (threshold más bajo)
+            # Rango: 0.0 (muy sensible) a 2.0 (muy perezoso)
+            image_threshold = (100.0 - sensitivity) / 50.0
+
             crop_top = float(self.config.get("crop_top", 0)) / 100.0
             crop_bottom = float(self.config.get("crop_bottom", 0)) / 100.0
             crop_left = float(self.config.get("crop_left", 0)) / 100.0
@@ -264,6 +274,30 @@ class PaddleOCRScanner:
                 if y1 < y2 and x1 < x2:
                     cropped_image = image[y1:y2, x1:x2]
                     
+                    # 2.5 Comparación visual rápida para evitar OCR innecesario
+                    should_scan = True
+                    if self._prev_dynamic_image is not None and self._prev_dynamic_image.shape == cropped_image.shape:
+                        # Redimensionar a miniatura para comparar "masa" de cambio
+                        img_small = cv2.resize(cropped_image, (128, 128), interpolation=cv2.INTER_AREA)
+                        prev_small = cv2.resize(self._prev_dynamic_image, (128, 128), interpolation=cv2.INTER_AREA)
+                        
+                        # Diferencia absoluta promedio
+                        diff = cv2.absdiff(img_small, prev_small)
+                        change_index = np.mean(diff)
+                        
+                        # Usar el umbral dinámico basado en el slider
+                        if change_index < image_threshold:
+                            should_scan = False
+                    
+                    self._prev_dynamic_image = cropped_image.copy()
+
+                    if not should_scan:
+                        # Saltar OCR y seguir al siguiente ciclo
+                        elapsed = time.time() - start_time
+                        sleep_time = max(0.1, interval - elapsed)
+                        time.sleep(sleep_time)
+                        continue
+
                     # 3. OCR (con lock para evitar conflictos con otros hilos)
                     with self._scan_lock:
                         elements = self.ocr.scan_image(cropped_image)
@@ -279,7 +313,7 @@ class PaddleOCRScanner:
                     if all_text:
                         similarity = SequenceMatcher(None, prev_string, all_text).ratio()
                         # Si el texto cambió lo suficiente, verbalizar
-                        if similarity < threshold:
+                        if similarity < text_threshold:
                             self.tts.speak(all_text, interrupt=True)
                             prev_string = all_text
                     
