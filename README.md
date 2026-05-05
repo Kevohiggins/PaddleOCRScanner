@@ -1,6 +1,6 @@
 # PaddleOCR Scanner
 
-Un escáner OCR ligero y potente, potenciado por **RapidOCR & ONNX**.
+Un escáner OCR ligero y potente, potenciado por **RapidOCR & OpenVINO**.
 
 ## ¿De qué va esto?
 
@@ -8,24 +8,7 @@ Este programa cumple la misma función que el OCR nativo de Windows, pero usando
 
 PaddleOCR Scanner captura lo que tenés en pantalla y te permite navegar el texto detectado con el teclado, simulando un "cursor virtual" sobre los elementos.
 
-## Atajos de Teclado Globales
-
-*   `Ctrl + Alt + S` -> **Escaneo de Pantalla:** Captura absolutamente todo lo que se ve en tu monitor.
-*   `Ctrl + Alt + W` -> **Escaneo de Ventana:** Enfoca el OCR únicamente en la ventana que tengas activa.
-*   `Ctrl + Alt + D` -> **Escaneo Dinámico:** Activa la lectura en tiempo real. Vigila la pantalla en bucle y te avisa cuando detecta cambios (ideal para seguir subtítulos).
-*   `Ctrl + Shift + C` -> **Configuración:** Abre el panel para cambiar resoluciones, atajos y zonas de recorte.
-*   `Ctrl + Alt + Q` -> **Cerrar Programa:** Apaga el scanner por completo.
-
-## ¿Cómo navegar por los resultados?
-
-Cuando hacés un escaneo estático (S o W), el programa te avisa cuántos bloques de texto encontró. A partir de ahí:
-
-*   **Flechas Arriba / Abajo:** Te movés entre las líneas de texto detectadas.
-*   **Enter:** Hace un click izquierdo real justo donde está el texto.
-*   **Shift + Enter:** Hace doble click izquierdo.
-*   **Tecla Aplicaciones:** Simula un click derecho.
-
-*(Nota: De momento, la navegación es por líneas/bloques completos. Todavía no permite la lectura palabra por palabra).*
+Si querés más info, chequeá el manual.
 
 ## Aclaración importante
 
