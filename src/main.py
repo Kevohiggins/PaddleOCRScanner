@@ -1,16 +1,7 @@
 """
-PaddleOCR Screen Scanner — Punto de entrada principal.
-
-Herramienta de accesibilidad que escanea la pantalla con OCR,
-permite navegar los elementos detectados con teclado, y hace click
-en el elemento seleccionado.
-
-Uso:
-    python main.py            → Inicia el scanner
-    python main.py --setup    → Abre menú de configuración (consola)
+PaddleOCR Screen Scanner — Versión con Depuración de Errores y Navegación Reforzada.
 """
 
-import argparse
 import ctypes
 import logging
 import os
@@ -18,575 +9,229 @@ import sys
 import threading
 import time
 import wx
+import win32gui
+import win32con
+import win32api
+import win32process
 from difflib import SequenceMatcher
 
-from config import load_config, run_setup, run_gui_setup, CONFIG_FILE
+from config import load_config, save_config, CONFIG_FILE, get_effective_config
 from tts_engine import TTSEngine
 from ocr_engine import OCREngine
 from screen_capture import capture_screen, capture_active_window
 from navigator import ElementNavigator
 from shadow_manager import ShadowManager
-import keyboard
-import win32gui
-import win32process
 import cv2
 import numpy as np
 
-# Configurar logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
-    datefmt="%H:%M:%S",
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(name)s] %(levelname)s: %(message)s")
 logger = logging.getLogger("main")
 
+MOD_MAP = {"ctrl": win32con.MOD_CONTROL, "alt": win32con.MOD_ALT, "shift": win32con.MOD_SHIFT, "win": win32con.MOD_WIN}
+# Mapa de teclas especiales que no son caracteres simples
+VK_MAP = {
+    "enter": 0x0D, "esc": 0x1B, "space": 0x20, "tab": 0x09, "backspace": 0x08, "up": 0x26, "down": 0x28, "left": 0x25, "right": 0x27,
+    "f1": 0x70, "f2": 0x71, "f3": 0x72, "f4": 0x73, "f5": 0x74, "f6": 0x75, "f7": 0x76, "f8": 0x77, "f9": 0x78, "f10": 0x79, "f11": 0x7A, "f12": 0x7B, "apps": 0x5D, "menu": 0x5D
+}
 
-def is_admin() -> bool:
-    """Verifica si el proceso actual tiene privilegios de administrador."""
-    try:
-        return ctypes.windll.shell32.IsUserAnAdmin() != 0
-    except Exception:
-        return False
+def parse_hotkey(hotkey_str):
+    if not hotkey_str or hotkey_str == "Sin asignar": return 0, 0
+    parts = [p.strip().lower() for p in hotkey_str.split('+')]
+    mods, vk = 0, 0
+    for p in parts:
+        if p in MOD_MAP:
+            mods |= MOD_MAP[p]
+        elif p in VK_MAP:
+            vk = VK_MAP[p]
+        elif len(p) == 1:
+            res = ctypes.windll.user32.VkKeyScanW(ord(p))
+            if res != -1: vk = res & 0xFF
+    return mods, vk
 
+class HotkeyFrame(wx.Frame):
+    def __init__(self, callback_map):
+        super().__init__(None, style=wx.NO_BORDER)
+        self.callback_map = callback_map
+        self.Bind(wx.EVT_HOTKEY, self.on_hotkey)
 
-def elevate_to_admin():
-    """Re-lanza el script como administrador para que los hooks funcionen en ventanas elevadas."""
-    params = " ".join(sys.argv[1:])
-    python_exe = sys.executable
+    def register(self, hk_id, hotkey_str):
+        mods, vk = parse_hotkey(hotkey_str)
+        self.UnregisterHotKey(hk_id)
+        if vk == 0: return False
+        return self.RegisterHotKey(hk_id, mods, vk)
 
-    if getattr(sys, 'frozen', False):
-        # Si está compilado (PyInstaller), python_exe ya es el ejecutable.
-        # No pasamos el script como argumento extra porque eso causaría un error en argparse.
-        logger.info("Re-lanzando ejecutable como administrador: %s %s", python_exe, params)
-        ret = ctypes.windll.shell32.ShellExecuteW(
-            None, "runas", python_exe, params, None, 1,
-        )
-    else:
-        script = os.path.abspath(sys.argv[0])
-        logger.info("Re-lanzando script como administrador: %s %s %s", python_exe, script, params)
-        ret = ctypes.windll.shell32.ShellExecuteW(
-            None, "runas", python_exe, f'"{script}" {params}', None, 1,
-        )
+    def unregister_all(self):
+        for hk_id in list(self.callback_map.keys()): self.UnregisterHotKey(hk_id)
 
-    if ret > 32:
-        sys.exit(0)
-    else:
-        logger.error("No se pudo elevar a administrador (código: %s)", ret)
-        print("Error: No se pudo obtener permisos de administrador.")
-        sys.exit(1)
-
+    def on_hotkey(self, event):
+        hk_id = event.GetId()
+        if hk_id in self.callback_map: self.callback_map[hk_id]()
 
 class PaddleOCRScanner:
-    """Aplicación principal del scanner."""
-
     def __init__(self):
-        self.config = load_config()
+        self.full_config = load_config()
+        self.config = get_effective_config(self.full_config)
         self.tts = TTSEngine()
         self.ocr = OCREngine(self.config)
         self._scan_lock = threading.Lock()
-        self._quit_event = threading.Event()
-        self._last_offset_x = 0
-        self._last_offset_y = 0
-        
-        # Modo Sombra
-        self.shadow = ShadowManager(CONFIG_FILE)
-        self._is_learning = False
-        
         self.is_dynamic_running = False
-        self.dynamic_thread = None
-        self._prev_dynamic_image = None
-        self.app = None
-        self._last_reset_time = 0
+        self.shadow = ShadowManager(CONFIG_FILE)
+        self.app = wx.App(False)
+        self.hotkey_frame = None
+        self._last_profile = "Global"
+        self._last_elements = []
 
     def start(self):
-        """Inicializa todo y arranca el listener de hotkeys."""
         self.tts.play_startup()
-        self.tts.speak("Iniciando PaddleOCR Scanner...")
-
         try:
-            self.tts.speak("Cargando motor OCR.")
             self.ocr.initialize()
-            self.tts.speak("Motor OCR listo.")
         except Exception as e:
-            self.tts.speak(f"Error al inicializar el motor OCR: {e}")
-            logger.error("Error inicializando OCR: %s", e, exc_info=True)
-            sys.exit(1)
-
-        # Hotkeys usando la librería 'keyboard' para soporte total de supresión (secuestro de teclas)
-        try:
-            keyboard.add_hotkey(self.config.get("hotkey_screen") or "ctrl+alt+s", self._on_scan_screen, suppress=True)
-            keyboard.add_hotkey(self.config.get("hotkey_window") or "ctrl+alt+w", self._on_scan_window, suppress=True)
-            keyboard.add_hotkey(self.config.get("hotkey_config") or "ctrl+shift+c", self._on_open_config, suppress=True)
-            keyboard.add_hotkey(self.config.get("hotkey_quit") or "ctrl+alt+q", self._on_quit_hotkey, suppress=True)
-            keyboard.add_hotkey(self.config.get("hotkey_dynamic") or "ctrl+alt+d", self._toggle_dynamic_mode, suppress=True)
-            
-            keyboard.add_hotkey("ctrl+alt+l", self._on_start_learning, suppress=True)
-            keyboard.add_hotkey("ctrl+alt+r", self._on_reset_shadow, suppress=True)
-            keyboard.add_hotkey("ctrl+alt+u", self._on_toggle_shadow, suppress=True)
-            logger.info("Hotkeys registrados con supresión activa.")
-        except Exception as e:
-            logger.error("Error registrando hotkeys: %s", e)
-
-        hotkey_screen = self.config.get("hotkey_screen") or "ctrl+alt+s"
-        hotkey_window = self.config.get("hotkey_window") or "ctrl+alt+w"
-        hotkey_config = self.config.get("hotkey_config") or "ctrl+shift+c"
-        hotkey_quit = self.config.get("hotkey_quit") or "ctrl+alt+q"
-        hotkey_dynamic = self.config.get("hotkey_dynamic") or "ctrl+alt+d"
-
-        tts_screen = hotkey_screen.replace('ctrl', 'control').replace('+', ' ')
-        tts_window = hotkey_window.replace('ctrl', 'control').replace('+', ' ')
-        tts_config = hotkey_config.replace('ctrl', 'control').replace('+', ' ')
-        tts_quit = hotkey_quit.replace('ctrl', 'control').replace('+', ' ')
-        tts_dynamic = hotkey_dynamic.replace('ctrl', 'control').replace('+', ' ')
-
-        self.tts.speak(
-            f"Scanner activo. "
-            f"{tts_screen} para pantalla completa. "
-            f"{tts_window} para ventana activa. "
-            f"{tts_dynamic} para escaneo dinámico. "
-            f"{tts_config} para configuración. "
-            f"{tts_quit} para salir."
-        )
-
-        logger.info("Scanner activo. Hotkeys: screen=%s, window=%s, config=%s, quit=%s",
-                     hotkey_screen, hotkey_window, hotkey_config, hotkey_quit)
-        print("PaddleOCR Scanner activo (administrador).")
-        print(f"  Pantalla completa: {hotkey_screen}")
-        print(f"  Ventana activa:    {hotkey_window}")
-        print(f"  Configuración:     {hotkey_config}")
-        print(f"  Salir:             {hotkey_quit}")
-        print()
-
-        self.app = wx.App(False)
-        self.dummy_frame = wx.Frame(None, title="Dummy")
+            logger.error(f"Error inicializando OCR: {e}")
+            self.tts.speak("Error al cargar el motor de lectura.")
+        
+        hk_map = { 101: self._on_scan_screen, 102: self._on_scan_window, 103: self._on_open_config, 104: self._on_quit_hotkey, 105: self._toggle_dynamic_scan, 106: self._on_learn_shadow, 107: self._on_clear_shadow, 108: self._on_toggle_shadow }
+        self.hotkey_frame = HotkeyFrame(hk_map); self._refresh_hotkeys()
+        self.tts.speak("Scanner listo.")
         self.app.MainLoop()
-        self.tts.play_shutdown()
-        self.tts.speak("PaddleOCR Scanner cerrado.")
-        logger.info("Scanner cerrado.")
+        self.tts.speak("Cerrando programa.")
+        self.tts.play_shutdown(); time.sleep(1.0); sys.exit(0)
+
+    def _get_current_app_name(self):
+        hwnd = win32gui.GetForegroundWindow(); _, pid = win32process.GetWindowThreadProcessId(hwnd)
+        try: import psutil; return psutil.Process(pid).name()
+        except: return "Global"
+
+    def _update_profile(self):
+        app_name = self._get_current_app_name(); self.shadow.set_app(app_name)
+        if app_name in self.full_config.get("profiles", {}) or self._last_profile != "Global":
+            new_config = get_effective_config(self.full_config, app_name)
+            
+            # Re-inicializar si cambian parámetros estructurales
+            needs_reinit = (
+                new_config.get("ocr_language") != self.config.get("ocr_language") or 
+                new_config.get("use_gpu") != self.config.get("use_gpu") or
+                str(new_config.get("image_scale")) != str(self.config.get("image_scale"))
+            )
+            
+            if needs_reinit:
+                self.config = new_config; self.ocr = OCREngine(self.config); self.ocr.initialize()
+            else: self.config = new_config
+            
+            self._last_profile = app_name if app_name in self.full_config["profiles"] else "Global"
+
+    def _refresh_hotkeys(self):
+        c = self.full_config["global"]
+        self.hotkey_frame.register(101, c.get("hotkey_screen", "ctrl+alt+s"))
+        self.hotkey_frame.register(102, c.get("hotkey_window", "ctrl+alt+w"))
+        self.hotkey_frame.register(103, c.get("hotkey_config", "ctrl+shift+c"))
+        self.hotkey_frame.register(104, c.get("hotkey_quit", "ctrl+alt+q"))
+        self.hotkey_frame.register(105, c.get("hotkey_dynamic", "ctrl+alt+d"))
+        self.hotkey_frame.register(106, c.get("hotkey_shadow_learn", "ctrl+alt+l"))
+        self.hotkey_frame.register(107, c.get("hotkey_shadow_clear", "ctrl+alt+r"))
+        self.hotkey_frame.register(108, c.get("hotkey_shadow_toggle", "ctrl+alt+u"))
 
     def _release_modifiers(self):
-        """Fuerza la liberación de teclas modificadoras (Keyboard & WinAPI)."""
-        # 1. Liberar vía librería keyboard para limpiar su estado interno
-        for key in ['ctrl', 'alt', 'shift', 'windows']:
+        for vk in [0x11, 0x12, 0x10, 0x5B, 0x5C]: ctypes.windll.user32.keybd_event(vk, 0, 0x0002, 0)
+        time.sleep(0.1)
+
+    def _on_learn_shadow(self): self._release_modifiers(); threading.Thread(target=self._do_burst_learning, daemon=True).start()
+
+    def _do_burst_learning(self):
+        app_name = self._get_current_app_name(); self.shadow.set_app(app_name)
+        self.tts.speak("Aprendizaje iniciado.")
+        burst_results = []
+        for i in range(4):
             try:
-                keyboard.release(key)
-            except Exception:
-                pass
-        
-        # 2. Pequeño respiro para que Windows procese el estado físico
-        time.sleep(0.05)
+                img, ox, oy = capture_screen(); elements = self.ocr.scan_image(img)
+                burst_results.append(elements); self.tts.play_scan_start()
+            except Exception as e: logger.error(f"Error en aprendizaje: {e}")
+            time.sleep(1.0)
+        count = self.shadow.learn_from_burst(burst_results)
+        if count > 0:
+            self.full_config = load_config(); self.tts.play_scan_success(); self.tts.speak(f"Completado. {count} sombras fijadas.")
+        else: self.tts.play_error(); self.tts.speak("Sin sombras nuevas.")
 
-        # 3. Liberación forzosa vía Windows API (KeyUp)
-        # LCtrl, RCtrl, LShift, RShift, LAlt, RAlt, LWin, RWin
-        vks = [0xA2, 0xA3, 0xA0, 0xA1, 0xA4, 0xA5, 0x5B, 0x5C]
-        for vk in vks:
-            # 0x0002 es el flag KEYEVENTF_KEYUP
-            ctypes.windll.user32.keybd_event(vk, 0, 0x0002, 0)
+    def _on_clear_shadow(self): self._release_modifiers(); self.shadow.clear(); self.tts.speak("Sombras borradas.")
+    def _on_toggle_shadow(self): self._release_modifiers(); state = self.shadow.toggle(); self.tts.speak("Sombra activa." if state else "Sombra inactiva.")
 
-    def _get_active_app_name(self):
-        """Obtiene el título de la ventana activa para usar como nombre de perfil."""
-        try:
-            hwnd = win32gui.GetForegroundWindow()
-            title = win32gui.GetWindowText(hwnd)
-            if not title:
-                return "Global"
-            # Limpiar un poco el título para que no sea excesivamente largo o variable
-            return title[:50].strip()
-        except Exception:
-            return "Global"
+    def _on_scan_screen(self): 
+        self._release_modifiers(); self._update_profile()
+        self.tts.speak("Escaneando pantalla."); self._start_scan("screen")
 
-    def _update_current_app(self):
-        """Actualiza el perfil de sombra basado en la ventana actual."""
-        app_name = self._get_active_app_name()
-        self.shadow.set_app(app_name)
+    def _on_scan_window(self): 
+        self._release_modifiers(); self._update_profile()
+        self.tts.speak("Escaneando ventana."); self._start_scan("window")
 
-    def _on_scan_screen(self):
-        """Escanea pantalla completa."""
+    def _apply_crops(self, img, ox, oy):
+        h, w = img.shape[:2]
+        ct, cb, cl, cr = [float(self.config.get(k, 0))/100.0 for k in ["crop_top", "crop_bottom", "crop_left", "crop_right"]]
+        y1, y2 = int(h * ct), int(h * (1.0 - cb)); x1, x2 = int(w * cl), int(w * (1.0 - cr))
+        if y2 <= y1 + 50: y1, y2 = 0, h
+        if x2 <= x1 + 50: x1, x2 = 0, w
+        return img[y1:y2, x1:x2], ox + x1, oy + y1
+
+    def _toggle_dynamic_scan(self):
         self._release_modifiers()
-        self._update_current_app()
-        self._start_scan(mode="screen")
-
-    def _on_scan_window(self):
-        """Escanea solo la ventana activa."""
-        self._release_modifiers()
-        self._update_current_app()
-        self._start_scan(mode="window")
-        
-    def _toggle_dynamic_mode(self):
-        """Alterna el estado del escaneo dinámico."""
-        self._release_modifiers()
-        self._update_current_app()
         if self.is_dynamic_running:
-            self.is_dynamic_running = False
-            self._prev_dynamic_image = None # Limpiar caché al apagar
-            self.tts.play_error() # Tono bajo para indicar que se apagó
-            self.tts.speak("Escaneo dinámico desactivado.", interrupt=True)
+            self.is_dynamic_running = False; self.tts.play_error(); self.tts.speak("Escaneo dinámico detenido.")
         else:
-            self.is_dynamic_running = True
-            self.tts.play_scan_start() # Tono ascendente para indicar que arrancó
-            self.tts.speak("Escaneando dinámicamente.", interrupt=True)
-            self.dynamic_thread = threading.Thread(target=self._dynamic_ocr_loop, daemon=True)
-            self.dynamic_thread.start()
+            self._update_profile(); self.is_dynamic_running = True
+            self.tts.play_scan_start(); self.tts.speak("Escaneo dinámico activado.")
+            threading.Thread(target=self._dynamic_scan_loop, daemon=True).start()
 
-    def _dynamic_ocr_loop(self):
-        """Bucle que escanea la pantalla continuamente usando lógica similar a LION."""
-        prev_string = ""
-        
+    def _dynamic_scan_loop(self):
+        prev_text = ""
         while self.is_dynamic_running:
-            start_time = time.time()
-            
-            # Actualizar perfil por si cambió de ventana
-            self._update_current_app()
-            
-            # Leer configuración en cada ciclo para permitir cambios en tiempo real
-            interval = float(self.config.get("dynamic_interval", 1.0))
-            target = self.config.get("dynamic_target", "screen")
-            sensitivity = float(self.config.get("dynamic_sensitivity", 50))
-            
-            # Umbral de texto: a más sensibilidad, más fácil es que hable (threshold más alto)
-            text_threshold = sensitivity / 100.0
-            
-            # Umbral de imagen: a más sensibilidad, menos cambio hace falta para disparar OCR (threshold más bajo)
-            # Rango: 0.0 (muy sensible) a 2.0 (muy perezoso)
-            image_threshold = (100.0 - sensitivity) / 50.0
-
-            crop_top = float(self.config.get("crop_top", 0)) / 100.0
-            crop_bottom = float(self.config.get("crop_bottom", 0)) / 100.0
-            crop_left = float(self.config.get("crop_left", 0)) / 100.0
-            crop_right = float(self.config.get("crop_right", 0)) / 100.0
-
             try:
-                # 1. Captura
-                if target == "window":
-                    image, off_x, off_y = capture_active_window()
-                else:
-                    image, off_x, off_y = capture_screen()
-                
-                h, w = image.shape[:2]
-                
-                # 2. Calcular márgenes de recorte
-                y1 = int(h * crop_top)
-                y2 = int(h * (1.0 - crop_bottom))
-                x1 = int(w * crop_left)
-                x2 = int(w * (1.0 - crop_right))
-                
-                # Validar recorte
-                if y1 < y2 and x1 < x2:
-                    cropped_image = image[y1:y2, x1:x2]
-                    
-                    # 2.5 Comparación visual rápida para evitar OCR innecesario
-                    should_scan = True
-                    if self._prev_dynamic_image is not None and self._prev_dynamic_image.shape == cropped_image.shape:
-                        # Redimensionar a miniatura para comparar "masa" de cambio
-                        img_small = cv2.resize(cropped_image, (128, 128), interpolation=cv2.INTER_AREA)
-                        prev_small = cv2.resize(self._prev_dynamic_image, (128, 128), interpolation=cv2.INTER_AREA)
-                        
-                        # Diferencia absoluta promedio
-                        diff = cv2.absdiff(img_small, prev_small)
-                        change_index = np.mean(diff)
-                        
-                        # Usar el umbral dinámico basado en el slider
-                        if change_index < image_threshold:
-                            should_scan = False
-                    
-                    self._prev_dynamic_image = cropped_image.copy()
+                self._update_profile()
+                img, ox, oy = capture_active_window() if self.config.get("dynamic_target") == "window" else capture_screen()
+                img, ox, oy = self._apply_crops(img, ox, oy)
+                with self._scan_lock: elements = self.ocr.scan_image(img)
+                self._last_elements = elements
+                elements = self.shadow.filter_elements(elements)
+                full_text = " ".join([e.text for e in elements]).strip()
+                if full_text and SequenceMatcher(None, prev_text, full_text).ratio() < 0.7:
+                    self.tts.speak(full_text, interrupt=True); prev_text = full_text
+            except Exception as e: logger.error(f"Error dinámico: {e}")
+            time.sleep(float(self.config.get("dynamic_interval", 1.0)))
 
-                    if not should_scan:
-                        # Saltar OCR y seguir al siguiente ciclo
-                        elapsed = time.time() - start_time
-                        sleep_time = max(0.1, interval - elapsed)
-                        time.sleep(sleep_time)
-                        continue
-
-                    # 3. OCR (con lock para evitar conflictos con otros hilos)
-                    with self._scan_lock:
-                        elements = self.ocr.scan_image(cropped_image)
-                    
-                    # 3.5 Filtrar por Modo Sombra
-                    elements = self.shadow.filter_elements(elements)
-                    
-                    current_texts = [e.text for e in elements]
-                    
-                    # 4. Diferencias estilo LION (usando SequenceMatcher)
-                    all_text = " ".join(current_texts).strip()
-                    
-                    if all_text:
-                        similarity = SequenceMatcher(None, prev_string, all_text).ratio()
-                        # Si el texto cambió lo suficiente, verbalizar
-                        if similarity < text_threshold:
-                            self.tts.speak(all_text, interrupt=True)
-                            prev_string = all_text
-                    
-            except Exception as e:
-                logger.error("Error en bucle dinámico: %s", e)
-                
-            # Calcular tiempo restante para dormir
-            elapsed = time.time() - start_time
-            sleep_time = max(0.1, interval - elapsed)
-            time.sleep(sleep_time)
-
-    def _on_open_config(self):
-        """Abre la GUI de configuración en el hilo principal."""
-        self._release_modifiers()
-        wx.CallAfter(self._open_config_native)
-
-    def _open_config_native(self):
-        """Abre la ventana de configuración wxPython de manera nativa."""
-        try:
-            from gui_config import show_config_window
-            old_config = dict(self.config)
-            
-            new_config = show_config_window(self.config)
-            
-            if new_config:
-                self.config.update(new_config)
-                self.tts.speak("Configuración actualizada.", interrupt=True)
-            if (old_config.get("ocr_language") != self.config.get("ocr_language") or
-                old_config.get("use_gpu") != self.config.get("use_gpu") or
-                old_config.get("image_scale") != self.config.get("image_scale")):
-                self.tts.speak("Re-cargando motor OCR...")
-                self.ocr = OCREngine(self.config)
-                self.ocr.initialize()
-                self.tts.speak("Motor OCR actualizado.")
-        except Exception as e:
-            self.tts.speak(f"Error en configuración: {e}", interrupt=True)
-            logger.error("Error en configuración: %s", e, exc_info=True)
-
-    def _on_quit_hotkey(self):
-        """Cierra el programa liberando las teclas para evitar que queden 'pegadas'."""
-        self._release_modifiers()
-        time.sleep(0.2) # Breve espera para que Windows procese la liberación
-        self._quit_event.set()
-        if self.app:
-            wx.CallAfter(self.app.ExitMainLoop)
-
-    def _on_start_learning(self):
-        """Inicia el proceso de aprendizaje del Modo Sombra."""
-        if self._is_learning:
-            self.tts.speak("Ya estoy aprendiendo la interfaz.", interrupt=True)
-            return
-        self._release_modifiers()
-        self._update_current_app()
-        threading.Thread(target=self._do_learning, daemon=True).start()
-
-    def _do_learning(self):
-        """Fase de aprendizaje: identifica elementos persistentes durante unos segundos."""
-        self._is_learning = True
-        try:
-            app_name = self.shadow.current_app
-            self.tts.play_scan_start()
-            self.tts.speak(f"Modo Sombra: Aprendiendo perfil [{app_name}]. Mantené la pantalla quieta 5 segundos.", interrupt=True)
-            
-            samples = []
-            start_time = time.time()
-            duration = 5.0
-            
-            # 1. Recolectar muestras
-            while time.time() - start_time < duration:
-                try:
-                    # Usar captura de pantalla completa para el aprendizaje
-                    image, off_x, off_y = capture_screen()
-                    
-                    with self._scan_lock:
-                        elements = self.ocr.scan_image(image)
-                        
-                    if elements:
-                        samples.append(elements)
-                    time.sleep(0.6) # Un poco más rápido que antes para tener más muestras
-                except Exception as e:
-                    logger.error("Error en muestreo de aprendizaje: %s", e)
-
-            if len(samples) < 2:
-                self.tts.play_error()
-                self.tts.speak("No se obtuvieron suficientes muestras para aprender.")
-                return
-
-            # 2. Agrupar elementos similares entre muestras por proximidad
-            # Cada entrada en 'groups' será: {'element': DetectedElement, 'count': int}
-            groups = []
-            
-            for sample in samples:
-                for el in sample:
-                    found_group = False
-                    # Buscar un grupo existente donde este elemento encaje
-                    for group in groups:
-                        target = group['element']
-                        # Distancia euclidiana entre centros
-                        dist_sq = ((el.x + el.w/2) - (target.x + target.w/2))**2 + \
-                                  ((el.y + el.h/2) - (target.y + target.h/2))**2
-                        
-                        # Si están cerca (radio de 20px)
-                        if dist_sq < 400: 
-                            text_sim = SequenceMatcher(None, el.text, target.text).ratio()
-                            
-                            # Criterio de coincidencia:
-                            # 1. El texto es muy parecido (>70%)
-                            # 2. O la posición Y el tamaño son muy estables (típico de un reloj o HUD)
-                            #    Un subtítulo cambia mucho de ancho, un reloj no.
-                            size_stable = abs(el.w - target.w) < 15 and abs(el.h - target.h) < 10
-                            
-                            if text_sim > 0.7 or (dist_sq < 225 and size_stable):
-                                group['count'] += 1
-                                found_group = True
-                                break
-                    
-                    if not found_group:
-                        groups.append({'element': el, 'count': 1})
-
-            # 3. Identificar regiones estables (que aparecen en > 80% de las muestras)
-            # Esto evita que subtítulos o avisos temporales sean capturados.
-            threshold = len(samples) * 0.8
-            stable_regions = []
-            stable_texts = []
-            
-            for group in groups:
-                if group['count'] >= threshold:
-                    el = group['element']
-                    # Si el texto es corto y siempre igual, lo marcamos como sombra de texto también
-                    if len(el.text) > 2 and len(el.text) < 30:
-                        stable_texts.append(el.text)
-
-                    # Añadir margen generoso para absorber jitter de OCR
-                    margin = 8
-                    stable_regions.append([
-                        el.x - margin, 
-                        el.y - margin, 
-                        el.w + margin*2, 
-                        el.h + margin*2
-                    ])
-
-            # 4. Guardar nuevas regiones y textos
-            added_count = 0
-            for reg in stable_regions:
-                if self.shadow.add_region(*reg):
-                    added_count += 1
-            
-            for txt in stable_texts:
-                self.shadow.add_text_shadow(txt)
-            
-            self.shadow.save()
-            self.tts.play_scan_success()
-            if added_count > 0:
-                self.tts.speak(f"Aprendizaje completado en [{app_name}]. Se agregaron {added_count} sombras.", interrupt=True)
-            else:
-                self.tts.speak(f"No se encontraron elementos nuevos en [{app_name}].", interrupt=True)
-
-        except Exception as e:
-            logger.error("Error crítico en _do_learning: %s", e, exc_info=True)
-            self.tts.speak(f"Ocurrió un error durante el aprendizaje: {e}")
-        finally:
-            self._is_learning = False
-
-    def _on_reset_shadow(self):
-        """Limpia las sombras del perfil actual o de todos (si se pulsa 2 veces)."""
-        self._release_modifiers()
-        now = time.time()
-        
-        # Si la diferencia es menor a 0.6 segundos, es una pulsación doble
-        if now - self._last_reset_time < 0.6:
-            self.shadow.clear_all()
-            self.tts.play_error()
-            self.tts.speak("Todas las sombras de todos los perfiles han sido eliminadas.", interrupt=True)
-            self._last_reset_time = 0 # Resetear tiempo para evitar triple pulsación
-        else:
-            self._last_reset_time = now
-            # Usar un pequeño delay para el mensaje de la app actual por si viene la segunda pulsación
-            threading.Timer(0.6, self._do_single_reset, args=(now,)).start()
-
-    def _do_single_reset(self, press_time):
-        """Ejecuta el reset individual si no hubo una segunda pulsación."""
-        # Si el tiempo sigue siendo el mismo, no hubo otra pulsación en el medio
-        if self._last_reset_time == press_time:
-            self._update_current_app()
-            app_name = self.shadow.current_app
-            self.shadow.clear()
-            self.shadow.is_enabled = True
-            self.tts.play_error()
-            self.tts.speak(f"Sombras de [{app_name}] reseteadas. Pulsá dos veces rápido para borrar todo.", interrupt=True)
-
-    def _on_toggle_shadow(self):
-        """Activa o desactiva el filtrado de sombras."""
-        self._release_modifiers()
-        is_enabled = self.shadow.toggle()
-        if is_enabled:
-            self.tts.play_scan_success()
-            self.tts.speak("Modo Sombra activado.")
-        else:
-            self.tts.play_error()
-            self.tts.speak("Modo Sombra desactivado.")
-
-    def _start_scan(self, mode: str):
-        """Inicia un escaneo en thread aparte."""
-        if not self._scan_lock.acquire(blocking=False):
-            self.tts.speak("Escaneo en curso, esperá.", interrupt=True)
-            return
+    def _start_scan(self, mode):
+        if self._scan_lock.locked(): return
         threading.Thread(target=self._do_scan, args=(mode,), daemon=True).start()
 
-    def _do_scan(self, mode: str):
-        """Ejecuta el flujo: captura → OCR → navegación."""
-        try:
-            if mode == "window":
-                self.tts.speak("Escaneando ventana activa...", interrupt=True)
-            else:
-                self.tts.speak("Escaneando pantalla...", interrupt=True)
-            
-            self.tts.play_scan_start()
-            logger.info("Escaneo modo=%s", mode)
+    def _do_scan(self, mode):
+        with self._scan_lock:
+            try:
+                self.tts.play_scan_start()
+                img, ox, oy = capture_active_window() if mode == "window" else capture_screen()
+                img, ox, oy = self._apply_crops(img, ox, oy)
+                raw = self.ocr.scan_image(img); self._last_elements = raw
+                elements = self.shadow.filter_elements(raw)
+                if elements:
+                    self.tts.play_scan_success()
+                    self.tts.speak(f"{len(elements)} resultados.", interrupt=True)
+                    nav = ElementNavigator(self.tts, self.config, ox, oy); nav.navigate(elements)
+                else: 
+                    self.tts.play_error(); self.tts.speak("No se detectó nada.", interrupt=True)
+            except Exception as e:
+                logger.error(f"Error en escaneo: {e}")
+                self.tts.speak("Error en el escaneo.")
 
-            # 1. Captura
-            if mode == "window":
-                image, offset_x, offset_y = capture_active_window()
-            else:
-                image, offset_x, offset_y = capture_screen()
+    def _on_open_config(self): self._release_modifiers(); wx.CallAfter(self._open_config_native)
 
-            self._last_offset_x = offset_x
-            self._last_offset_y = offset_y
-            logger.info("Captura: %dx%d, offset=(%d,%d)",
-                        image.shape[1], image.shape[0], offset_x, offset_y)
+    def _open_config_native(self):
+        from gui_config import show_config_window
+        self.hotkey_frame.unregister_all()
+        res = show_config_window(self.full_config)
+        if res: self.full_config = res; self._update_profile(); self.tts.speak("Guardado.")
+        self._refresh_hotkeys()
 
-            # 2. OCR
-            elements = self.ocr.scan_image(image)
-            
-            # 2.5 Filtrar por Modo Sombra
-            elements = self.shadow.filter_elements(elements)
-
-            if not elements:
-                self.tts.play_error()
-                self.tts.speak("No se detectó texto.", interrupt=True)
-                return
-
-            self.tts.play_scan_success()
-            logger.info("Detectados %d elementos", len(elements))
-
-            # 3. Navegación
-            navigator = ElementNavigator(self.tts, offset_x, offset_y)
-            navigator.navigate(elements)
-
-        except Exception as e:
-            self.tts.speak(f"Error: {e}", interrupt=True)
-            logger.error("Error en escaneo: %s", e, exc_info=True)
-        finally:
-            self._scan_lock.release()
-
+    def _on_quit_hotkey(self):
+        if self.app: wx.CallAfter(self.app.ExitMainLoop)
 
 def main():
-    parser = argparse.ArgumentParser(description="PaddleOCR Screen Scanner")
-    parser.add_argument("--setup", action="store_true", help="Configuración por consola")
-    parser.add_argument("--no-admin", action="store_true", help="No pedir admin")
-    args = parser.parse_args()
+    if not ctypes.windll.shell32.IsUserAnAdmin():
+        ctypes.windll.shell32.ShellExecuteW(None, "runas", sys.executable, f'"{os.path.abspath(sys.argv[0])}"', None, 1)
+    else: PaddleOCRScanner().start()
 
-    if args.setup:
-        run_setup()
-        return
-
-    if not args.no_admin and not is_admin():
-        print("Solicitando privilegios de administrador...")
-        elevate_to_admin()
-        return
-
-    scanner = PaddleOCRScanner()
-    scanner.start()
-
-
-if __name__ == "__main__":
-    main()
+if __name__ == "__main__": main()

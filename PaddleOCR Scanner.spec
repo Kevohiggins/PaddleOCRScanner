@@ -3,19 +3,17 @@ import os
 import sys
 from PyInstaller.utils.hooks import collect_data_files, collect_dynamic_libs
 
-# 1. Definir archivos de datos
+# 1. Definir archivos de datos (LIMPIO: sin config.json ni manual.html)
 datas = [
-    ('config.json', '.'), 
-    ('manual.html', '.'), 
     ('models', 'models'),
     ('src/assets', 'src/assets')
 ]
-# Recolectar datos de las librerias
+
+# Recolectar datos de las librerías necesarias
 datas += collect_data_files('rapidocr_openvino')
 datas += collect_data_files('openvino')
 
-# 2. Recolectar BINARIOS (DLLs) de OpenVINO explícitamente
-# Esto es vital para que encuentre los "frontends" (IR, ONNX, etc.)
+# 2. Recolectar BINARIOS (DLLs) de OpenVINO
 binaries = collect_dynamic_libs('openvino')
 
 a = Analysis(
@@ -24,7 +22,6 @@ a = Analysis(
     binaries=binaries,
     datas=datas,
     hiddenimports=[
-        'keyboard', 
         'PIL.Image', 
         'rapidocr_openvino', 
         'openvino.runtime',
@@ -37,12 +34,35 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[],
+    excludes=[
+        'keyboard', 'pynput', 'paddle', 'paddleocr', 'paddlex', 'paddle2onnx',
+        'scipy', 'matplotlib', 'pandas', 'tkinter',
+        'PyQt5', 'PySide2', 'PySide6', 'notebook', 'ipython',
+        'setuptools', 'distutils', 'docutils',
+        'PIL.ImageQt', 'PIL.ImageTk', 'jedi', 'sqlite3',
+        'huggingface_hub', 'requests', 'urllib3', 'cryptography',
+        'pyasn1', 'pyasn1_modules', 'rsa', 'cachetools'
+    ],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
     cipher=None,
     noarchive=False,
 )
+
+# FILTRO AGRESIVO DE BINARIOS
+# Eliminamos todo lo que no sea esencial para ahorrar espacio
+excluded_bin_patterns = [
+    'ffmpeg', 'videoio', 'highgui', 'opencv_ml', 'opencv_objdetect', 'opencv_photo',
+    'tensorflow', 'pytorch', 'caffe', 'paddle', 'opencl',
+    'openvino_tensorflow_frontend', 'openvino_pytorch_frontend',
+    'openvino_caffe_frontend', 'openvino_paddle_frontend'
+]
+
+a.binaries = [
+    b for b in a.binaries 
+    if not any(p in b[0].lower() for p in excluded_bin_patterns)
+]
+
 pyz = PYZ(a.pure, a.zipped_data, cipher=None)
 
 exe = EXE(
@@ -62,6 +82,7 @@ exe = EXE(
     codesign_identity=None,
     entitlements_file=None,
 )
+
 coll = COLLECT(
     exe,
     a.binaries,

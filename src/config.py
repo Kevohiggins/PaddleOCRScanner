@@ -12,23 +12,33 @@ def get_base_path():
 CONFIG_FILE = os.path.join(get_base_path(), "config.json")
 
 DEFAULT_CONFIG = {
-    "ocr_language": "latin",
-    "min_confidence": 0.3,
-    "use_gpu": True,
-    "image_scale": 0.5,
-    "hotkey_screen": "ctrl+alt+s",
-    "hotkey_window": "ctrl+alt+w",
-    "hotkey_config": "ctrl+shift+c",
-    "hotkey_quit": "ctrl+alt+q",
-    "row_tolerance": 20,
-    "dynamic_interval": 1.0,
-    "hotkey_dynamic": "ctrl+alt+d",
-    "dynamic_target": "screen",
-    "crop_top": 0,
-    "crop_bottom": 0,
-    "crop_left": 0,
-    "crop_right": 0,
-    "dynamic_sensitivity": 50
+    "global": {
+        "ocr_language": "latin",
+        "min_confidence": 0.3,
+        "use_gpu": True,
+        "image_scale": 0.5,
+        "hotkey_screen": "ctrl+alt+s",
+        "hotkey_window": "ctrl+alt+w",
+        "hotkey_config": "ctrl+shift+c",
+        "hotkey_quit": "ctrl+alt+q",
+        "row_tolerance": 20,
+        "dynamic_interval": 1.0,
+        "hotkey_dynamic": "ctrl+alt+d",
+        "dynamic_target": "screen",
+        "crop_top": 0,
+        "crop_bottom": 0,
+        "crop_left": 0,
+        "crop_right": 0,
+        "dynamic_sensitivity": 50,
+        "key_next": "down",
+        "key_prev": "up",
+        "key_click": "enter",
+        "key_double": "shift+enter",
+        "key_right": "menu",
+        "key_exit": "esc"
+    },
+    "profiles": {},
+    "shadow_profiles": {} # Mantenemos esto por compatibilidad o lo migramos luego
 }
 
 def load_config() -> dict:
@@ -36,11 +46,34 @@ def load_config() -> dict:
         try:
             with open(CONFIG_FILE, "r", encoding="utf-8") as f:
                 user_config = json.load(f)
-            return {**DEFAULT_CONFIG, **user_config}
+            
+            # Si el archivo es viejo (no tiene "global"), migramos los datos a "global"
+            if "global" not in user_config:
+                new_config = {"global": {}, "profiles": user_config.get("profiles", {}), "shadow_profiles": user_config.get("shadow_profiles", {})}
+                for k, v in user_config.items():
+                    if k not in ["profiles", "shadow_profiles"]:
+                        new_config["global"][k] = v
+                user_config = new_config
+
+            # Mezclar con defaults para asegurar que no falten llaves
+            final_config = DEFAULT_CONFIG.copy()
+            final_config["global"].update(user_config.get("global", {}))
+            final_config["profiles"].update(user_config.get("profiles", {}))
+            final_config["shadow_profiles"].update(user_config.get("shadow_profiles", {}))
+            return final_config
+            
         except (json.JSONDecodeError, IOError):
             pass
+    
     save_config(DEFAULT_CONFIG)
     return dict(DEFAULT_CONFIG)
+
+def get_effective_config(full_config: dict, app_name: str = None) -> dict:
+    """Devuelve los ajustes resultantes para una app específica (Global + Overrides)."""
+    base = full_config.get("global", {}).copy()
+    if app_name and app_name in full_config.get("profiles", {}):
+        base.update(full_config["profiles"][app_name])
+    return base
 
 def save_config(config: dict):
     with open(CONFIG_FILE, "w", encoding="utf-8") as f:

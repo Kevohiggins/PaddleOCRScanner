@@ -80,6 +80,35 @@ class OCREngine:
         det_model_path_v3 = os.path.join(models_root, "detection_v3", "det.xml")
         det_model_path_v5 = os.path.join(models_root, "detection_v5", "det.xml")
         
+        # LÓGICA INTELIGENTE:
+        # 1. Obtenemos el ancho de pantalla para saber con qué trabajamos.
+        import ctypes
+        try:
+            screen_w = ctypes.windll.user32.GetSystemMetrics(0)
+        except Exception:
+            screen_w = 1920
+            
+        scale_val = float(self.config.get("image_scale", 1.0))
+        
+        # 2. Definimos PISOS de calidad según la escala seleccionada
+        if scale_val >= 2.0:    # Ultra
+            floor = 2560
+        elif scale_val >= 1.0:  # Nativa
+            floor = 1600
+        elif scale_val >= 0.75: # Alta
+            floor = 1280
+        else:                   # Media y Baja
+            floor = 960
+
+        # 3. Calculamos el límite final:
+        # - Intentamos que sea: Resolución * Escala
+        # - Pero nunca menos que el 'floor' de esa escala.
+        # - Y nunca más de 2560 (nuestro techo de seguridad).
+        det_limit = int(min(2560, max(floor, screen_w * scale_val)))
+        
+        logger.info("OCREngine: Lógica de Pisos activada -> Límite: %d (Res: %d, Escala: %.2f, Piso: %d)", 
+                    det_limit, screen_w, scale_val, floor)
+
         ocr_kwargs = {
             "det_device": device,
             "rec_device": device,
@@ -87,7 +116,7 @@ class OCREngine:
             "use_cls": False,
             "use_space_char": True,
             "det_db_unclip_ratio": 2.0,
-            "det_limit_side_len": 960,
+            "det_limit_side_len": det_limit,
         }
 
         # Configurar Detector

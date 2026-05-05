@@ -1,0 +1,11 @@
+2026-05-05 02:00:43,388 [tts_engine] INFO: TTS: Ruta de sonidos configurada en D:\proyectos\Paddle OCR\src\assets\sounds
+2026-05-05 02:00:43,521 [libloader.com] INFO: Successfully loaded COM object: SAPI.SPVoice
+2026-05-05 02:00:43,524 [tts_engine] INFO: TTS: accessible_output2 inicializado (lector de pantalla detectado)
+2026-05-05 02:00:43,526 [shadow_manager] INFO: ShadowManager: 3 perfiles cargados.
+2026-05-05 02:00:43,832 [ocr_engine] INFO: OCREngine: Lógica de Pisos activada -> Límite: 1920 (Res: 1920, Escala: 1.00, Piso: 1600)
+2026-05-05 02:00:43,834 [ocr_engine] INFO: OCREngine: Usando detector interno de la librería (Mobile V4)
+2026-05-05 02:00:43,835 [ocr_engine] INFO: OCREngine: Cargando modelo REC v5 [latin] de latin
+2026-05-05 02:00:43,841 [ocr_engine] INFO: Inicializando RapidOCR (OpenVINO) — Dispositivo: GPU
+2026-05-05 02:00:45,930 [ocr_engine] INFO: RapidOCR inicializado correctamente en GPU
+2026-05-05 02:00:59,809 [ocr_engine] INFO: Tiempos OCR (OpenVINO): Det=2.002s, Rec=0.000s, Total=2.111s
+2026-05-05 02:01:07,866 [ocr_engine] INFO: Tiempos OCR (OpenVINO): Det=1.373s, Rec=0.000s, Total=1.446s

@@ -1,336 +1,227 @@
 import wx
 import os
-from config import save_config, load_config
+import json
+import logging
+from config import CONFIG_FILE, DEFAULT_CONFIG, save_config
 
+logger = logging.getLogger(__name__)
 
-class NativeConfigDialog(wx.Dialog):
-    """Diálogo nativo de configuración, 100% compatible con lectores de pantalla."""
+class HotkeyCaptureDialog(wx.Dialog):
+    def __init__(self, parent, config, key_id):
+        super().__init__(parent, title="Capturar Atajo", size=(300, 150))
+        self.config = config; self.key_id = key_id; self.final_hotkey = ""
+        panel = wx.Panel(self); sizer = wx.BoxSizer(wx.VERTICAL)
+        self.label = wx.StaticText(panel, label="Presione la combinación de teclas...", style=wx.ALIGN_CENTER)
+        sizer.Add(self.label, 1, wx.EXPAND | wx.ALL, 20)
+        panel.SetSizer(sizer)
+        self.Bind(wx.EVT_KEY_DOWN, self.on_key_down)
 
-    def __init__(self, parent, title, config):
-        super().__init__(parent, title=title, size=(550, 800),
-                         style=wx.DEFAULT_DIALOG_STYLE | wx.RESIZE_BORDER)
-
-        self.config = dict(config)
-        self.result_config = None
-
-        main_container = wx.BoxSizer(wx.VERTICAL)
-
-        # ScrolledWindow para que funcione en cualquier resolución
-        scroll = wx.ScrolledWindow(self, style=wx.VSCROLL)
-        scroll.SetScrollRate(0, 20)
-        scroll_sizer = wx.BoxSizer(wx.VERTICAL)
-
-        # --- Cabecera ---
-        header = wx.Panel(scroll)
-        header.SetBackgroundColour(wx.Colour(0, 120, 215))
-        h_sizer = wx.BoxSizer(wx.VERTICAL)
-
-        t = wx.StaticText(header, label="Configuración de PaddleOCR Scanner")
-        t.SetForegroundColour(wx.WHITE)
-        f = t.GetFont()
-        f.SetPointSize(16)
-        f.SetWeight(wx.FONTWEIGHT_BOLD)
-        t.SetFont(f)
-
-        sub = wx.StaticText(header, label="Personalizá atajos, precisión y rendimiento")
-        sub.SetForegroundColour(wx.WHITE)
-
-        h_sizer.Add(t, 0, wx.ALL, 10)
-        h_sizer.Add(sub, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 10)
-        header.SetSizer(h_sizer)
-        scroll_sizer.Add(header, 0, wx.EXPAND)
-
-        content = wx.BoxSizer(wx.VERTICAL)
-
-        # =====================================================================
-        # Helpers
-        # =====================================================================
-        def section(label):
-            box = wx.StaticBox(scroll, label=label)
-            fnt = box.GetFont()
-            fnt.SetWeight(wx.FONTWEIGHT_BOLD)
-            box.SetFont(fnt)
-            return wx.StaticBoxSizer(box, wx.VERTICAL)
-
-        def add_text_field(parent, grid, label_text, value, tooltip):
-            """Agrega un campo de texto con su etiqueta accesible."""
-            lbl = wx.StaticText(parent, label=label_text)
-            ctrl = wx.TextCtrl(parent, value=str(value), name=label_text)
-            ctrl.SetName(label_text)
-            ctrl.SetToolTip(tooltip)
-            grid.Add(lbl, 0, wx.ALIGN_CENTER_VERTICAL)
-            grid.Add(ctrl, 1, wx.EXPAND)
-            return ctrl
-
-        def add_spin_double(parent, grid, label_text, value, lo, hi, inc, digits, tooltip):
-            """Agrega un SpinCtrlDouble con su etiqueta accesible."""
-            lbl = wx.StaticText(parent, label=label_text)
-            ctrl = wx.SpinCtrlDouble(parent, min=lo, max=hi, initial=float(value), inc=inc, name=label_text)
-            ctrl.SetDigits(digits)
-            ctrl.SetName(label_text)
-            ctrl.SetToolTip(tooltip)
-            grid.Add(lbl, 0, wx.ALIGN_CENTER_VERTICAL)
-            grid.Add(ctrl, 1, wx.EXPAND)
-            return ctrl
-
-        def add_spin_int(parent, grid, label_text, value, lo, hi, tooltip):
-            """Agrega un SpinCtrl entero con su etiqueta accesible."""
-            lbl = wx.StaticText(parent, label=label_text)
-            ctrl = wx.SpinCtrl(parent, value=str(value), min=lo, max=hi, name=label_text)
-            ctrl.SetName(label_text)
-            ctrl.SetToolTip(tooltip)
-            grid.Add(lbl, 0, wx.ALIGN_CENTER_VERTICAL)
-            grid.Add(ctrl, 1, wx.EXPAND)
-            return ctrl
-
-        def add_choice(parent, grid, label_text, choices, selection, tooltip):
-            """Agrega un Choice (desplegable) con su etiqueta accesible."""
-            lbl = wx.StaticText(parent, label=label_text)
-            ctrl = wx.Choice(parent, choices=choices, name=label_text)
-            ctrl.SetSelection(selection)
-            ctrl.SetName(label_text)
-            ctrl.SetToolTip(tooltip)
-            grid.Add(lbl, 0, wx.ALIGN_CENTER_VERTICAL)
-            grid.Add(ctrl, 1, wx.EXPAND)
-            return ctrl
-
-        # =====================================================================
-        # 1. ATAJOS DE TECLADO
-        # =====================================================================
-        s1 = section("Atajos de Teclado")
-        g1 = wx.FlexGridSizer(cols=2, vgap=15, hgap=10)
-        g1.AddGrowableCol(1)
-
-        self.hk_screen = add_text_field(scroll, g1,
-            "Escanear Pantalla Completa",
-            self.config.get("hotkey_screen", "ctrl+alt+s"),
-            "Combinación de teclas para escanear toda la pantalla. Ejemplo: ctrl+alt+s")
-
-        self.hk_window = add_text_field(scroll, g1,
-            "Escanear Ventana Activa",
-            self.config.get("hotkey_window", "ctrl+alt+w"),
-            "Combinación de teclas para escanear solo la ventana activa. Ejemplo: ctrl+alt+w")
-
-        self.hk_config = add_text_field(scroll, g1,
-            "Abrir este Menú",
-            self.config.get("hotkey_config", "ctrl+shift+c"),
-            "Combinación de teclas para abrir esta ventana de configuración. Ejemplo: ctrl+shift+c")
-
-        self.hk_quit = add_text_field(scroll, g1,
-            "Cerrar Aplicación",
-            self.config.get("hotkey_quit", "ctrl+alt+q"),
-            "Combinación de teclas para cerrar el programa. Ejemplo: ctrl+alt+q")
-
-        s1.Add(g1, 1, wx.EXPAND | wx.ALL, 10)
-        content.Add(s1, 0, wx.EXPAND | wx.TOP, 15)
-
-        # =====================================================================
-        # 2. MOTOR DE RECONOCIMIENTO
-        # =====================================================================
-        s2 = section("Motor de Reconocimiento")
-        g2 = wx.FlexGridSizer(cols=2, vgap=15, hgap=10)
-        g2.AddGrowableCol(1)
-
-        self.min_conf = add_spin_double(scroll, g2,
-            "Confianza Mínima",
-            self.config.get("min_confidence", 0.5),
-            0.1, 1.0, 0.1, 1,
-            "Valores altos ignoran texto dudoso. 0.5 es el balance ideal.")
-
-        self.row_tol = add_spin_int(scroll, g2,
-            "Tolerancia de Filas (píxeles)",
-            self.config.get("row_tolerance", 20),
-            1, 100,
-            "Margen vertical para agrupar palabras en la misma línea.")
-
-        scale_choices = [
-            "Nativa (100% - Preciso)",
-            "Alta (75%)",
-            "Media (50%)",
-            "Baja (35% - Rápido)",
-        ]
-        scale_val = str(self.config.get("image_scale", 1.0))
-        scale_idx = {"1.0": 0, "0.75": 1, "0.5": 2, "0.35": 3}.get(scale_val, 0)
-
-        self.scale = add_choice(scroll, g2,
-            "Resolución de Análisis",
-            scale_choices, scale_idx,
-            "Reducir la resolución acelera el proceso pero puede perder letras muy chicas.")
-
-        lang_choices = [
-            "Latino (Español, Inglés, etc.)",
-            "Japonés / Chino",
-            "Coreano",
-            "Cirílico (Ruso, Ucraniano, etc.)",
-            "Tailandés",
-            "Árabe (Árabe, Urdu, Persa)",
-            "Hindi (Hindi, Marathi, Nepalí)"
-        ]
-        lang_val = self.config.get("ocr_language", "latin")
-        lang_map = {
-            "latin": 0, "japanese": 1, "chinese": 1, "korean": 2, 
-            "cyrillic": 3, "thai": 4, "arabic": 5, "hindi": 6
-        }
-        lang_idx = lang_map.get(lang_val, 0)
+    def on_key_down(self, event):
+        vk = event.GetKeyCode(); mods = []
+        if event.ControlDown(): mods.append("ctrl")
+        if event.AltDown(): mods.append("alt")
+        if event.ShiftDown(): mods.append("shift")
         
-        self.lang_choice = add_choice(scroll, g2,
-            "Idioma del OCR",
-            lang_choices, lang_idx,
-            "Seleccioná el modelo optimizado para el idioma que quieras leer.")
+        key = ""
+        if 32 <= vk <= 126: key = chr(vk).lower()
+        elif vk == wx.WXK_UP: key = "up"
+        elif vk == wx.WXK_DOWN: key = "down"
+        elif vk == wx.WXK_LEFT: key = "left"
+        elif vk == wx.WXK_RIGHT: key = "right"
+        elif vk == wx.WXK_RETURN: key = "enter"
+        elif vk == wx.WXK_ESCAPE: key = "esc"
+        elif vk == wx.WXK_SPACE: key = "space"
+        elif vk == wx.WXK_TAB: key = "tab"
+        elif vk == wx.WXK_BACK: key = "backspace"
+        elif wx.WXK_F1 <= vk <= wx.WXK_F12: key = f"f{vk - wx.WXK_F1 + 1}"
+        elif vk == wx.WXK_WINDOWS_MENU: key = "apps"
 
-        s2.Add(g2, 1, wx.EXPAND | wx.ALL, 10)
-        content.Add(s2, 0, wx.EXPAND | wx.TOP, 15)
+        if key:
+            self.final_hotkey = "+".join(mods + [key]) if mods else key
+            self.EndModal(wx.ID_OK)
+        elif not mods: event.Skip()
 
-        # =====================================================================
-        # 3. ESCANEO DINÁMICO
-        # =====================================================================
-        s3 = section("Escaneo Dinámico (Lectura Continua)")
-        g3 = wx.FlexGridSizer(cols=2, vgap=12, hgap=10)
-        g3.AddGrowableCol(1)
+class ConfigWindow(wx.Dialog):
+    PRO_NAMES = {
+        "hotkey_screen": "Escanear Pantalla", "hotkey_window": "Escanear Ventana", 
+        "hotkey_config": "Abrir Configuración", "hotkey_quit": "Salir del Programa",
+        "hotkey_dynamic": "Alternar Escaneo Dinámico", "hotkey_shadow_learn": "Modo Sombra: Aprender",
+        "hotkey_shadow_clear": "Modo Sombra: Limpiar", "hotkey_shadow_toggle": "Modo Sombra: Alternar",
+        "key_next": "Navegación: Siguiente", "key_prev": "Navegación: Anterior",
+        "key_click": "Navegación: Click Izquierdo", "key_double": "Navegación: Doble Click",
+        "key_right": "Navegación: Click Derecho", "key_exit": "Navegación: Salir"
+    }
 
-        self.hk_dynamic = add_text_field(scroll, g3,
-            "Atajo de Activación",
-            self.config.get("hotkey_dynamic", "ctrl+alt+d"),
-            "Combinación de teclas para activar o desactivar la lectura en tiempo real.")
+    def __init__(self, full_config):
+        super().__init__(None, title="Configuración de PaddleOCR Scanner", size=(650, 600))
+        self.full_config = full_config; self.current_profile = "Global"
+        self.temp_config = full_config["global"].copy()
+        
+        main_sizer = wx.BoxSizer(wx.VERTICAL)
+        
+        # Selector de Perfil
+        p_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        p_sizer.Add(wx.StaticText(self, label="Perfil Activo:"), 0, wx.CENTER | wx.ALL, 5)
+        profiles = ["Global"] + list(full_config.get("profiles", {}).keys())
+        self.profile_choice = wx.Choice(self, choices=profiles, name="Perfil Activo")
+        self.profile_choice.SetSelection(0)
+        self.profile_choice.Bind(wx.EVT_CHOICE, self.on_profile_change)
+        p_sizer.Add(self.profile_choice, 1, wx.EXPAND | wx.ALL, 5)
+        
+        self.btn_add = wx.Button(self, label="Añadir Perfil"); self.btn_add.Bind(wx.EVT_BUTTON, self.on_add_profile)
+        self.btn_del = wx.Button(self, label="Eliminar Perfil"); self.btn_del.Bind(wx.EVT_BUTTON, self.on_del_profile)
+        p_sizer.Add(self.btn_add, 0, wx.ALL, 5); p_sizer.Add(self.btn_del, 0, wx.ALL, 5)
+        main_sizer.Add(p_sizer, 0, wx.EXPAND | wx.ALL, 10)
 
-        self.dyn_interval = add_spin_double(scroll, g3,
-            "Intervalo de Escaneo (segundos)",
-            self.config.get("dynamic_interval", 1.0),
-            0.2, 10.0, 0.2, 1,
-            "Cada cuánto tiempo se escanea la pantalla en segundo plano.")
+        # Tabs
+        self.tabs = wx.Notebook(self)
+        self.tab_general = wx.Panel(self.tabs); self.tab_keys = wx.ScrolledWindow(self.tabs, style=wx.VSCROLL)
+        self.tab_ocr = wx.ScrolledWindow(self.tabs, style=wx.VSCROLL); self.tab_dynamic = wx.Panel(self.tabs)
+        self.tab_keys.SetScrollRate(0, 20); self.tab_ocr.SetScrollRate(0, 20)
+        self.tabs.AddPage(self.tab_general, "General"); self.tabs.AddPage(self.tab_keys, "Atajos de Teclado")
+        self.tabs.AddPage(self.tab_ocr, "Precisión y Recortes"); self.tabs.AddPage(self.tab_dynamic, "Escaneo Dinámico")
+        
+        self._setup_general_tab(); self._setup_keys_tab(); self._setup_ocr_tab(); self._setup_dynamic_tab()
+        main_sizer.Add(self.tabs, 1, wx.EXPAND | wx.ALL, 10)
+        
+        # Botones Finales
+        btn_sizer = wx.StdDialogButtonSizer()
+        save_btn = wx.Button(self, wx.ID_OK, label="Guardar"); save_btn.SetDefault()
+        btn_sizer.AddButton(save_btn); btn_sizer.AddButton(wx.Button(self, wx.ID_CANCEL, label="Cancelar"))
+        btn_sizer.Realize()
+        main_sizer.Add(btn_sizer, 0, wx.ALIGN_RIGHT | wx.ALL, 10)
+        
+        self.SetSizer(main_sizer); self.update_ui_from_config()
+        self.Bind(wx.EVT_BUTTON, self.on_save, id=wx.ID_OK)
 
-        # --- Sensibilidad (justo después del intervalo) ---
-        sens_lbl = wx.StaticText(scroll, label="Sensibilidad al Cambio")
-        g3.Add(sens_lbl, 0, wx.ALIGN_CENTER_VERTICAL)
+    def _setup_general_tab(self):
+        sizer = wx.BoxSizer(wx.VERTICAL); grid = wx.FlexGridSizer(cols=2, vgap=20, hgap=10); grid.AddGrowableCol(1)
+        
+        # Estructura idéntica a la de escala que sí funciona
+        grid.Add(wx.StaticText(self.tab_general, label="Idioma OCR:"), 0, wx.ALIGN_CENTER_VERTICAL)
+        langs = ["Latino", "Chino/Japonés", "Coreano", "Cirílico", "Tailandés", "Árabe", "Hindi"]
+        self.lang_choice = wx.Choice(self.tab_general, choices=langs, name="Idioma OCR")
+        grid.Add(self.lang_choice, 1, wx.EXPAND)
+        
+        grid.Add(wx.StaticText(self.tab_general, label="Rendimiento:"), 0, wx.ALIGN_CENTER_VERTICAL)
+        self.use_gpu = wx.CheckBox(self.tab_general, label="Usar Aceleración GPU (OpenVINO)")
+        grid.Add(self.use_gpu, 1, wx.EXPAND)
+        
+        sizer.Add(grid, 1, wx.EXPAND | wx.ALL, 20); self.tab_general.SetSizer(sizer)
 
-        sens_row = wx.BoxSizer(wx.HORIZONTAL)
-        self.sensitivity = wx.Slider(
-            scroll,
-            value=int(self.config.get("dynamic_sensitivity", 50)),
-            minValue=0, maxValue=100,
-            style=wx.SL_HORIZONTAL,
-            name="Sensibilidad al Cambio"
-        )
-        self.sensitivity.SetName("Sensibilidad al Cambio")
-        self.sensitivity.SetToolTip("0: No verbaliza cambios automáticamente. 100: Verbaliza ante cualquier cambio mínimo.")
+    def _add_spin(self, parent, sizer, label, min_v, max_v, name=""):
+        sizer.Add(wx.StaticText(parent, label=label), 0, wx.ALIGN_CENTER_VERTICAL)
+        spin = wx.SpinCtrl(parent, min=min_v, max=max_v, name=name or label)
+        sizer.Add(spin, 1, wx.EXPAND); return spin
 
-        self.sens_val = wx.StaticText(scroll, label=str(self.sensitivity.GetValue()) + "%")
-        self.sensitivity.Bind(wx.EVT_SLIDER,
-            lambda e: self.sens_val.SetLabel(str(self.sensitivity.GetValue()) + "%"))
+    def _setup_keys_tab(self):
+        self.key_sizer = wx.BoxSizer(wx.VERTICAL)
+        ids = ["hotkey_screen", "hotkey_window", "hotkey_config", "hotkey_quit", "hotkey_dynamic", 
+               "hotkey_shadow_learn", "hotkey_shadow_clear", "hotkey_shadow_toggle",
+               "key_next", "key_prev", "key_click", "key_double", "key_right", "key_exit"]
+        for kid in ids:
+            btn = wx.Button(self.tab_keys, label=f"{self.PRO_NAMES[kid]}: ...", name=kid)
+            btn.Bind(wx.EVT_BUTTON, self.on_capture)
+            setattr(self, f"btn_{kid}", btn); self.key_sizer.Add(btn, 0, wx.EXPAND | wx.ALL, 5)
+        self.tab_keys.SetSizer(self.key_sizer)
 
-        sens_row.Add(self.sensitivity, 1, wx.EXPAND)
-        sens_row.Add(self.sens_val, 0, wx.LEFT | wx.ALIGN_CENTER_VERTICAL, 8)
-        g3.Add(sens_row, 1, wx.EXPAND)
+    def _setup_ocr_tab(self):
+        sizer = wx.BoxSizer(wx.VERTICAL); grid = wx.FlexGridSizer(cols=2, vgap=15, hgap=10); grid.AddGrowableCol(1)
+        self.min_conf = self._add_spin(self.tab_ocr, grid, "Confianza mínima (1-100%):", 1, 100)
+        grid.Add(wx.StaticText(self.tab_ocr, label="Escala de imagen:"), 0, wx.ALIGN_CENTER_VERTICAL)
+        self.scale_choice = wx.Choice(self.tab_ocr, choices=[
+            "Baja: La más rápida (35%)",
+            "Media: Muy rápida (50%)",
+            "Alta: Rápido y preciso (75%)",
+            "Nativa: Normal (100%)",
+            "Ultra: Recomendada para textos diminutos (200%)"
+        ], name="Escala de imagen")
+        grid.Add(self.scale_choice, 1, wx.EXPAND)
+        self.crop_t = self._add_spin(self.tab_ocr, grid, "Recorte Superior (%):", 0, 100)
+        self.crop_b = self._add_spin(self.tab_ocr, grid, "Recorte Inferior (%):", 0, 100)
+        self.crop_l = self._add_spin(self.tab_ocr, grid, "Recorte Izquierdo (%):", 0, 100)
+        self.crop_r = self._add_spin(self.tab_ocr, grid, "Recorte Derecho (%):", 0, 100)
+        sizer.Add(grid, 1, wx.EXPAND | wx.ALL, 20); self.tab_ocr.SetSizer(sizer)
 
-        target_idx = 0 if self.config.get("dynamic_target") == "screen" else 1
-        self.dyn_target = add_choice(scroll, g3,
-            "Área de Lectura",
-            ["Toda la Pantalla", "Solo Ventana Activa"],
-            target_idx,
-            "Elegí si querés escanear toda la pantalla o solo la ventana activa.")
+    def _setup_dynamic_tab(self):
+        sizer = wx.BoxSizer(wx.VERTICAL); grid = wx.FlexGridSizer(cols=2, vgap=20, hgap=10); grid.AddGrowableCol(1)
+        self.dyn_target = wx.RadioBox(self.tab_dynamic, label="Objetivo del escaneo", choices=["Pantalla Completa", "Ventana Activa"], name="Objetivo")
+        sizer.Add(self.dyn_target, 0, wx.EXPAND | wx.ALL, 10)
+        self.dyn_interval = self._add_spin(self.tab_dynamic, grid, "Intervalo de escaneo (décimas):", 1, 100, name="Intervalo")
+        self.dyn_sens = self._add_spin(self.tab_dynamic, grid, "Sensibilidad al cambio (1-100):", 1, 100, name="Sensibilidad")
+        sizer.Add(grid, 1, wx.EXPAND | wx.ALL, 20); self.tab_dynamic.SetSizer(sizer)
 
-        self.crop_t = add_spin_int(scroll, g3,
-            "Recorte Superior (%)",
-            self.config.get("crop_top", 0), 0, 100,
-            "Porcentaje de la pantalla a descartar desde arriba.")
+    def update_ui_from_config(self):
+        c = self.temp_config; defs = DEFAULT_CONFIG["global"]
+        l_map = {"latin":0, "chinese":1, "japanese":1, "korean":2, "cyrillic":3, "thai":4, "arabic":5, "hindi":6}
+        self.lang_choice.SetSelection(l_map.get(c.get("ocr_language", "latin"), 0))
+        self.use_gpu.SetValue(c.get("use_gpu", True))
+        self.min_conf.SetValue(int(c.get("min_confidence", 0.5) * 100))
+        s_map = {"0.35":0, "0.5":1, "0.75":2, "1.0":3, "2.0":4}
+        self.scale_choice.SetSelection(s_map.get(str(c.get("image_scale", 1.0)), 3))
+        for k, spin in [("crop_top", self.crop_t), ("crop_bottom", self.crop_b), ("crop_left", self.crop_l), ("crop_right", self.crop_r)]:
+            spin.SetValue(int(c.get(k, 0)))
+        self.dyn_interval.SetValue(int(c.get("dynamic_interval", 1.0) * 10))
+        self.dyn_sens.SetValue(int(c.get("dynamic_sensitivity", 50)))
+        self.dyn_target.SetSelection(0 if c.get("dynamic_target", "screen") == "screen" else 1)
+        is_global = (self.current_profile == "Global")
+        self.btn_del.Enable(not is_global)
+        ids = ["hotkey_screen", "hotkey_window", "hotkey_config", "hotkey_quit", "hotkey_dynamic", 
+               "hotkey_shadow_learn", "hotkey_shadow_clear", "hotkey_shadow_toggle",
+               "key_next", "key_prev", "key_click", "key_double", "key_right", "key_exit"]
+        for kid in ids:
+            if hasattr(self, f"btn_{kid}"):
+                val = c.get(kid, defs.get(kid, 'Sin asignar'))
+                getattr(self, f"btn_{kid}").SetLabel(f"{self.PRO_NAMES[kid]}: {val}")
 
-        self.crop_b = add_spin_int(scroll, g3,
-            "Recorte Inferior (%)",
-            self.config.get("crop_bottom", 0), 0, 100,
-            "Porcentaje de la pantalla a descartar desde abajo.")
+    def on_profile_change(self, event):
+        new_p = self.profile_choice.GetStringSelection()
+        if new_p == "Global": self.temp_config = self.full_config["global"].copy()
+        else: self.temp_config = self.full_config["profiles"].get(new_p, self.full_config["global"]).copy()
+        self.current_profile = new_p; self.update_ui_from_config()
 
-        self.crop_l = add_spin_int(scroll, g3,
-            "Recorte Izquierdo (%)",
-            self.config.get("crop_left", 0), 0, 100,
-            "Porcentaje de la pantalla a descartar desde la izquierda.")
+    def on_add_profile(self, event):
+        dlg = wx.TextEntryDialog(self, "Nombre del nuevo perfil (ej: vlc.exe):", "Añadir Perfil")
+        if dlg.ShowModal() == wx.ID_OK:
+            name = dlg.GetValue().strip()
+            if name and name not in self.full_config["profiles"]:
+                self.full_config["profiles"][name] = self.full_config["global"].copy()
+                self.profile_choice.Append(name); self.profile_choice.SetStringSelection(name)
+                self.on_profile_change(None)
+        dlg.Destroy()
 
-        self.crop_r = add_spin_int(scroll, g3,
-            "Recorte Derecho (%)",
-            self.config.get("crop_right", 0), 0, 100,
-            "Porcentaje de la pantalla a descartar desde la derecha.")
+    def on_del_profile(self, event):
+        p = self.profile_choice.GetStringSelection()
+        if p != "Global":
+            if wx.MessageBox(f"¿Borrar perfil {p}?", "Confirmar", wx.YES_NO) == wx.YES:
+                del self.full_config["profiles"][p]; self.profile_choice.Delete(self.profile_choice.GetSelection())
+                self.profile_choice.SetSelection(0); self.on_profile_change(None)
 
-        s3.Add(g3, 1, wx.EXPAND | wx.ALL, 10)
-        content.Add(s3, 0, wx.EXPAND | wx.TOP, 15)
+    def on_capture(self, event):
+        btn = event.GetEventObject(); dlg = HotkeyCaptureDialog(self, self.temp_config, btn.GetName())
+        if dlg.ShowModal() == wx.ID_OK: self.temp_config[btn.GetName()] = dlg.final_hotkey; self.update_ui_from_config()
+        dlg.Destroy()
 
-        # =====================================================================
-        # Ensamblar
-        # =====================================================================
-        scroll_sizer.Add(content, 1, wx.EXPAND | wx.ALL, 15)
-        scroll.SetSizer(scroll_sizer)
-        main_container.Add(scroll, 1, wx.EXPAND)
-
-        # --- Botones ---
-        main_container.Add(wx.StaticLine(self), 0, wx.EXPAND)
-
-        btn_sizer = wx.BoxSizer(wx.HORIZONTAL)
-
-        save_btn = wx.Button(self, label="Guardar Configuración", size=(180, 40))
-        save_btn.SetDefault()
-        save_btn.SetBackgroundColour(wx.Colour(0, 120, 215))
-        save_btn.SetForegroundColour(wx.WHITE)
-        save_btn.Bind(wx.EVT_BUTTON, self.on_save)
-
-        cancel_btn = wx.Button(self, label="Cancelar", size=(100, 40))
-        cancel_btn.Bind(wx.EVT_BUTTON, self.on_cancel)
-
-        btn_sizer.Add(save_btn, 0, wx.RIGHT, 10)
-        btn_sizer.Add(cancel_btn, 0)
-
-        main_container.Add(btn_sizer, 0, wx.ALIGN_RIGHT | wx.ALL, 20)
-
-        self.SetSizer(main_container)
-        self.Center()
-
-    # -----------------------------------------------------------------
-    # Eventos
-    # -----------------------------------------------------------------
     def on_save(self, event):
-        scale_map = {0: "1.0", 1: "0.75", 2: "0.5", 3: "0.35"}
+        l_inv = {0:"latin", 1:"chinese", 2:"korean", 3:"cyrillic", 4:"thai", 5:"arabic", 6:"hindi"}
+        self.temp_config["ocr_language"] = l_inv[self.lang_choice.GetSelection()]
+        self.temp_config["use_gpu"] = self.use_gpu.GetValue()
+        self.temp_config["min_confidence"] = self.min_conf.GetValue() / 100.0
+        s_inv = {0:0.35, 1:0.5, 2:0.75, 3:1.0, 4:2.0}
+        self.temp_config["image_scale"] = s_inv[self.scale_choice.GetSelection()]
+        self.temp_config["dynamic_interval"] = self.dyn_interval.GetValue() / 10.0
+        self.temp_config["dynamic_sensitivity"] = self.dyn_sens.GetValue()
+        self.temp_config["dynamic_target"] = "screen" if self.dyn_target.GetSelection() == 0 else "window"
+        self.temp_config["crop_top"] = self.crop_t.GetValue()
+        self.temp_config["crop_bottom"] = self.crop_b.GetValue()
+        self.temp_config["crop_left"] = self.crop_l.GetValue()
+        self.temp_config["crop_right"] = self.crop_r.GetValue()
+        if self.current_profile == "Global": self.full_config["global"].update(self.temp_config)
+        else: self.full_config["profiles"][self.current_profile] = self.temp_config.copy()
+        save_config(self.full_config); self.EndModal(wx.ID_OK)
 
-        self.config["hotkey_screen"] = self.hk_screen.GetValue()
-        self.config["hotkey_window"] = self.hk_window.GetValue()
-        self.config["hotkey_config"] = self.hk_config.GetValue()
-        self.config["hotkey_quit"] = self.hk_quit.GetValue()
-        self.config["min_confidence"] = self.min_conf.GetValue()
-        self.config["row_tolerance"] = self.row_tol.GetValue()
-        self.config["image_scale"] = float(scale_map[self.scale.GetSelection()])
-        
-        lang_map_inv = {0: "latin", 1: "japanese", 2: "korean", 3: "cyrillic", 4: "thai", 5: "arabic", 6: "hindi"}
-        self.config["ocr_language"] = lang_map_inv[self.lang_choice.GetSelection()]
-
-        self.config["hotkey_dynamic"] = self.hk_dynamic.GetValue()
-        self.config["dynamic_interval"] = self.dyn_interval.GetValue()
-        self.config["dynamic_target"] = "screen" if self.dyn_target.GetSelection() == 0 else "window"
-        self.config["crop_top"] = self.crop_t.GetValue()
-        self.config["crop_bottom"] = self.crop_b.GetValue()
-        self.config["crop_left"] = self.crop_l.GetValue()
-        self.config["crop_right"] = self.crop_r.GetValue()
-        self.config["dynamic_sensitivity"] = self.sensitivity.GetValue()
-
-        save_config(self.config)
-        self.result_config = self.config
-        self.EndModal(wx.ID_OK)
-
-    def on_cancel(self, event):
-        self.EndModal(wx.ID_CANCEL)
-
-
-def show_config_window(current_config=None):
-    """Abre el diálogo de configuración y devuelve la config resultante o None."""
-    app = wx.App.Get()
-    if not app:
-        app = wx.App(False)
-
-    config_to_edit = current_config if current_config else load_config()
-    dlg = NativeConfigDialog(None, "Configuración PaddleOCR Scanner", config_to_edit)
-
-    result = None
-    if dlg.ShowModal() == wx.ID_OK:
-        result = dlg.result_config
-
-    dlg.Destroy()
-    return result
-
-
-if __name__ == "__main__":
-    show_config_window()
+def show_config_window(full_config):
+    dlg = ConfigWindow(full_config)
+    res = dlg.ShowModal()
+    if res == wx.ID_OK: return dlg.full_config
+    return None
