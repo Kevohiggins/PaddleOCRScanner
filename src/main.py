@@ -1,5 +1,5 @@
 """
-PaddleOCR Screen Scanner — Versión con Depuración de Errores y Navegación Reforzada.
+PaddleOCR Screen Scanner — Versión Estable con Traducción Argos Estándar.
 """
 
 import ctypes
@@ -21,6 +21,7 @@ from ocr_engine import OCREngine
 from screen_capture import capture_screen, capture_active_window
 from navigator import ElementNavigator
 from shadow_manager import ShadowManager
+from translator import translator_instance
 import cv2
 import numpy as np
 
@@ -28,7 +29,6 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(name)s] %(levelna
 logger = logging.getLogger("main")
 
 MOD_MAP = {"ctrl": win32con.MOD_CONTROL, "alt": win32con.MOD_ALT, "shift": win32con.MOD_SHIFT, "win": win32con.MOD_WIN}
-# Mapa de teclas especiales que no son caracteres simples
 VK_MAP = {
     "enter": 0x0D, "esc": 0x1B, "space": 0x20, "tab": 0x09, "backspace": 0x08, "up": 0x26, "down": 0x28, "left": 0x25, "right": 0x27,
     "f1": 0x70, "f2": 0x71, "f3": 0x72, "f4": 0x73, "f5": 0x74, "f6": 0x75, "f7": 0x76, "f8": 0x77, "f9": 0x78, "f10": 0x79, "f11": 0x7A, "f12": 0x7B, "apps": 0x5D, "menu": 0x5D
@@ -83,8 +83,14 @@ class PaddleOCRScanner:
 
     def start(self):
         self.tts.play_startup()
+        self.tts.speak("Cargando scanner.")
         try:
             self.ocr.initialize()
+            translator_instance.set_on_ready_callback(lambda: self.tts.speak("Motor de traducción listo."))
+            
+            if self.config.get("translate_enabled"):
+                self.tts.speak("Iniciando motor de traducción.")
+                translator_instance.ensure_initialized()
         except Exception as e:
             logger.error(f"Error inicializando OCR: {e}")
             self.tts.speak("Error al cargar el motor de lectura.")
@@ -103,27 +109,27 @@ class PaddleOCRScanner:
 
     def _update_profile(self):
         app_name = self._get_current_app_name(); self.shadow.set_app(app_name)
-        if app_name in self.full_config.get("profiles", {}) or self._last_profile != "Global":
-            new_config = get_effective_config(self.full_config, app_name)
-            
-            # Re-inicializar si cambian parámetros estructurales
-            needs_reinit = (
-                new_config.get("ocr_language") != self.config.get("ocr_language") or 
-                new_config.get("use_gpu") != self.config.get("use_gpu") or
-                str(new_config.get("image_scale")) != str(self.config.get("image_scale"))
-            )
-            
-            if needs_reinit:
-                self.config = new_config; self.ocr = OCREngine(self.config); self.ocr.initialize()
-            else: self.config = new_config
-            
-            self._last_profile = app_name if app_name in self.full_config["profiles"] else "Global"
+        new_config = get_effective_config(self.full_config, app_name)
+        
+        needs_reinit = (
+            new_config.get("ocr_language") != self.config.get("ocr_language") or 
+            new_config.get("use_gpu") != self.config.get("use_gpu") or
+            str(new_config.get("image_scale")) != str(self.config.get("image_scale"))
+        )
+        
+        if needs_reinit:
+            self.config = new_config; self.ocr = OCREngine(self.config); self.ocr.initialize()
+        else: 
+            self.config = new_config
+            self.ocr.config = new_config
+        
+        self._last_profile = app_name if app_name in self.full_config["profiles"] else "Global"
 
     def _refresh_hotkeys(self):
         c = self.full_config["global"]
         self.hotkey_frame.register(101, c.get("hotkey_screen", "ctrl+alt+s"))
         self.hotkey_frame.register(102, c.get("hotkey_window", "ctrl+alt+w"))
-        self.hotkey_frame.register(103, c.get("hotkey_config", "ctrl+shift+c"))
+        self.hotkey_frame.register(103, c.get("hotkey_config", "ctrl+alt+c"))
         self.hotkey_frame.register(104, c.get("hotkey_quit", "ctrl+alt+q"))
         self.hotkey_frame.register(105, c.get("hotkey_dynamic", "ctrl+alt+d"))
         self.hotkey_frame.register(106, c.get("hotkey_shadow_learn", "ctrl+alt+l"))
@@ -190,8 +196,19 @@ class PaddleOCRScanner:
                 self._last_elements = elements
                 elements = self.shadow.filter_elements(elements)
                 full_text = " ".join([e.text for e in elements]).strip()
-                if full_text and SequenceMatcher(None, prev_text, full_text).ratio() < 0.7:
-                    self.tts.speak(full_text, interrupt=True); prev_text = full_text
+                
+                sens = float(self.config.get("dynamic_sensitivity", 50)) / 100.0
+                threshold = 1.0 - (sens * 0.5)
+                
+                if full_text and SequenceMatcher(None, prev_text, full_text).ratio() < threshold:
+                    prev_text = full_text
+                    
+                    if self.config.get("translate_enabled"):
+                        from_code = self.config.get("translate_from", "en")
+                        to_code = self.config.get("translate_to", "es")
+                        full_text = translator_instance.translate(full_text, from_code, to_code)
+                        
+                    self.tts.speak(full_text, interrupt=True)
             except Exception as e: logger.error(f"Error dinámico: {e}")
             time.sleep(float(self.config.get("dynamic_interval", 1.0)))
 
@@ -207,27 +224,53 @@ class PaddleOCRScanner:
                 img, ox, oy = self._apply_crops(img, ox, oy)
                 raw = self.ocr.scan_image(img); self._last_elements = raw
                 elements = self.shadow.filter_elements(raw)
-                if elements:
-                    self.tts.play_scan_success()
-                    self.tts.speak(f"{len(elements)} resultados.", interrupt=True)
-                    nav = ElementNavigator(self.tts, self.config, ox, oy); nav.navigate(elements)
-                else: 
-                    self.tts.play_error(); self.tts.speak("No se detectó nada.", interrupt=True)
             except Exception as e:
                 logger.error(f"Error en escaneo: {e}")
                 self.tts.speak("Error en el escaneo.")
+                return
+
+        # La traducción se hace dinámicamente en ElementNavigator._announce()
+        # al navegar, para no retrasar el reporte inicial de resultados.
+
+        if elements:
+            self.tts.play_scan_success()
+            self.tts.speak(f"{len(elements)} resultados.", interrupt=True)
+            nav = ElementNavigator(self.tts, self.config, ox, oy); nav.navigate(elements)
+        else: 
+            self.tts.play_error(); self.tts.speak("No se detectó nada.", interrupt=True)
 
     def _on_open_config(self): self._release_modifiers(); wx.CallAfter(self._open_config_native)
 
     def _open_config_native(self):
         from gui_config import show_config_window
-        self.hotkey_frame.unregister_all()
-        res = show_config_window(self.full_config)
-        if res: self.full_config = res; self._update_profile(); self.tts.speak("Guardado.")
+        res = show_config_window(self.full_config, self._last_profile, restart_callback=self.restart_app)
+        if res:
+            old_trans = self.config.get("translate_enabled", False)
+            self.full_config = res
+            self._update_profile()
+            new_trans = self.config.get("translate_enabled", False)
+            
+            msg = "Guardado."
+            if old_trans != new_trans:
+                msg += " Traducción " + ("activada." if new_trans else "desactivada.")
+                if new_trans:
+                    translator_instance.ensure_initialized()
+            
+            translator_instance.refresh_languages()
+            self.tts.speak(msg)
         self._refresh_hotkeys()
 
     def _on_quit_hotkey(self):
         if self.app: wx.CallAfter(self.app.ExitMainLoop)
+
+    def restart_app(self):
+        import sys
+        import subprocess
+        self.is_dynamic_running = False
+        executable = sys.executable
+        args = sys.argv
+        subprocess.Popen([executable] + args)
+        os._exit(0)
 
 def main():
     if not ctypes.windll.shell32.IsUserAnAdmin():

@@ -99,11 +99,8 @@ class OCREngine:
             floor = 1280
         else:                   # Media y Baja
             floor = 960
-
+ 
         # 3. Calculamos el límite final:
-        # - Intentamos que sea: Resolución * Escala
-        # - Pero nunca menos que el 'floor' de esa escala.
-        # - Y nunca más de 2560 (nuestro techo de seguridad).
         det_limit = int(min(2560, max(floor, screen_w * scale_val)))
         
         logger.info("OCREngine: Lógica de Pisos activada -> Límite: %d (Res: %d, Escala: %.2f, Piso: %d)", 
@@ -123,15 +120,10 @@ class OCREngine:
         if is_v3 and os.path.exists(det_model_path_v3):
             ocr_kwargs["det_model_path"] = det_model_path_v3
             logger.info("OCREngine: Usando detector v3 local [%s]", lang)
-        # elif not is_v3 and os.path.exists(det_model_path_v5):
-        #     # COMENTADO: Demasiado lento (5-6s). Usar solo si se necesita precisión extrema.
-        #     ocr_kwargs["det_model_path"] = det_model_path_v5
-        #     logger.info("OCREngine: Usando detector v5 local (Calidad Máxima)")
         else:
-            # Usar detector interno de la librería (Mobile V4) - Rápido y preciso
             logger.info("OCREngine: Usando detector interno de la librería (Mobile V4)")
 
-        # Configurar Reconocedor (Usamos el nuestro para asegurar Ñ y tildes)
+        # Configurar Reconocedor
         if os.path.exists(rec_model_path) and os.path.exists(rec_keys_path):
             ocr_kwargs["rec_model_path"] = rec_model_path
             ocr_kwargs["rec_keys_path"] = rec_keys_path
@@ -143,11 +135,8 @@ class OCREngine:
         
         try:
             self._ocr = RapidOCR(**ocr_kwargs)
-            
-            # Warmup invisible para evitar lag en el primer scan real
             dummy_img = np.zeros((64, 64, 3), dtype=np.uint8)
             self._ocr(dummy_img)
-            
             logger.info("RapidOCR inicializado correctamente en %s", device)
         except Exception as e:
             logger.warning("Error inicializando en %s: %s. Reintentando en CPU...", device, e)
@@ -173,10 +162,8 @@ class OCREngine:
         scale_factor = float(scale_val) if scale_val is not None else 1.0
         original_h, original_w = image.shape[:2]
         
-        # Escalar la imagen si se solicita
         if scale_factor != 1.0 and scale_factor > 0:
-            new_w = int(original_w * scale_factor)
-            new_h = int(original_h * scale_factor)
+            new_w, new_h = int(original_w * scale_factor), int(original_h * scale_factor)
             process_image = cv2.resize(image, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
         else:
             process_image = image
@@ -194,13 +181,14 @@ class OCREngine:
 
         elements = []
         conf_val = self.config.get("min_confidence")
-        min_confidence = float(conf_val) if conf_val is not None else 0.5
-        tol_val = self.config.get("row_tolerance")
-        row_tolerance = int(tol_val) if tol_val is not None else 20
+        min_confidence = float(conf_val) if conf_val is not None else 0.3
+        
+        # TOLERANCIA DE FILAS (Píxeles para agrupar en la misma línea)
+        row_tolerance = int(self.config.get("row_tolerance", 20))
 
         for detection in result:
             bbox = detection[0]       # [[x1,y1], [x2,y2], [x3,y3], [x4,y4]]
-            text = detection[1]       # texto reconocido
+            text = detection[1].strip() # texto reconocido
             confidence = float(detection[2])  # score de confianza
 
             if confidence < min_confidence:
@@ -212,14 +200,11 @@ class OCREngine:
             center_x = sum(p[0] for p in bbox) / 4.0
             center_y = sum(p[1] for p in bbox) / 4.0
             
-            # Calcular x, y, w, h para compatibilidad
-            xs = [p[0] for p in bbox]
-            ys = [p[1] for p in bbox]
-            x_min, x_max = min(xs), max(xs)
-            y_min, y_max = min(ys), max(ys)
+            xs, ys = [p[0] for p in bbox], [p[1] for p in bbox]
+            x_min, x_max, y_min, y_max = min(xs), max(xs), min(ys), max(ys)
 
             elements.append(DetectedElement(
-                text=text.strip(),
+                text=text,
                 bbox=bbox,
                 center_x=center_x,
                 center_y=center_y,

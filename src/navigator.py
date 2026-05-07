@@ -27,6 +27,8 @@ HOOKPROC = ctypes.WINFUNCTYPE(LRESULT, ctypes.c_int, ctypes.wintypes.WPARAM, cty
 SPECIAL_VK = {
     "enter": 0x0D, "esc": 0x1B, "space": 0x20, "tab": 0x09, "backspace": 0x08,
     "up": 0x26, "down": 0x28, "left": 0x25, "right": 0x27,
+    "home": 0x24, "end": 0x23, "page up": 0x21, "page down": 0x22,
+    "insert": 0x2D, "delete": 0x2E, "capslock": 0x14,
     "f1": 0x70, "f2": 0x71, "f3": 0x72, "f4": 0x73, "f5": 0x74, "f6": 0x75, "f7": 0x76, "f8": 0x77, "f9": 0x78, "f10": 0x79, "f11": 0x7A, "f12": 0x7B,
     "apps": 0x5D, "menu": 0x5D, "shift": 0x10, "ctrl": 0x11, "alt": 0x12
 }
@@ -89,26 +91,75 @@ class ElementNavigator:
             "key_click":  ("enter", self._on_left),
             "key_next":   ("down", self._on_next),
             "key_prev":   ("up", self._on_prev),
-            "key_exit":   ("esc", self._on_exit)
+            "key_exit":   ("esc", self._on_exit),
+            "key_copy":   ("ctrl+c", self._on_copy),
+            "key_first":  ("home", self._on_first),
+            "key_last":   ("end", self._on_last),
+            "key_skip_next": ("right", lambda: self._on_skip(5)),
+            "key_skip_prev": ("left", lambda: self._on_skip(-5)),
+            "key_repeat": ("space", self._on_repeat)
         }
 
         for cid, (default, func) in actions.items():
             target_vk, target_mask = string_to_hotkey(self.config.get(cid, ""), default)
             if vk == target_vk and current_mask == target_mask:
                 return func()
+            
         return False
 
     def _on_next(self): self.index = (self.index+1)%len(self.elements); self._announce(); return True
     def _on_prev(self): self.index = (self.index-1)%len(self.elements); self._announce(); return True
+    def _on_first(self): self.index = 0; self._announce(); return True
+    def _on_last(self): self.index = len(self.elements) - 1; self._announce(); return True
+    
+    def _on_repeat(self):
+        current_time = time.time()
+        if hasattr(self, '_last_repeat_time') and (current_time - self._last_repeat_time) < 0.5:
+            self._spell_current()
+            self._last_repeat_time = 0
+        else:
+            self._last_repeat_time = current_time
+            self._announce()
+        return True
+
+    def _spell_current(self):
+        if hasattr(self, '_last_announced_text'):
+            text = self._last_announced_text
+            spelled = "; ".join([c if not c.isspace() else "espacio" for c in text])
+            self.tts.speak(spelled, interrupt=True)
+
+    def _on_skip(self, amount):
+        if not self.elements: return
+        self.index = (self.index + amount) % len(self.elements)
+        self._announce(); return True
     def _on_left(self): self._click("left"); return True
     def _on_double(self): self._click("double"); return True
     def _on_right(self): self._click("right"); return True
     def _on_exit(self): self.tts.speak("Cerrado."); self._stop(); return True
+    
+    def _on_copy(self):
+        if hasattr(self, '_last_announced_text'):
+            import wx
+            text = self._last_announced_text
+            def do_copy():
+                if wx.TheClipboard.Open():
+                    wx.TheClipboard.SetData(wx.TextDataObject(text))
+                    wx.TheClipboard.Close()
+            wx.CallAfter(do_copy)
+            self.tts.speak("Copiado.", interrupt=True)
 
     def _announce(self):
         if 0 <= self.index < len(self.elements):
             el = self.elements[self.index]
-            self.tts.speak(f"{el.text} {self.index+1} de {len(self.elements)}", interrupt=True)
+            text = el.text
+            if self.config.get("translate_enabled"):
+                from translator import translator_instance
+                from_code = self.config.get("translate_from", "en")
+                to_code = self.config.get("translate_to", "es")
+                text = translator_instance.translate(text, from_code, to_code)
+            
+            self._last_announced_text = text
+            self.tts.speak(f"{text} {self.index+1} de {len(self.elements)}", interrupt=True)
 
     def _click(self, mode):
         if 0 <= self.index < len(self.elements):

@@ -1,0 +1,289 @@
+2026-05-06 15:52:16,561 [INFO] TTS: Ruta de sonidos configurada en D:\proyectos\Paddle OCR\src\assets\sounds
+2026-05-06 15:52:16,767 [INFO] Successfully loaded COM object: SAPI.SPVoice
+2026-05-06 15:52:16,771 [INFO] TTS: accessible_output2 inicializado (lector de pantalla detectado)
+2026-05-06 15:52:17,050 [INFO] OCREngine: LÛgica de Pisos activada -> LÌmite: 1600 (Res: 1536, Escala: 1.00, Piso: 1600)
+2026-05-06 15:52:17,050 [INFO] OCREngine: Usando detector interno de la librerÌa (Mobile V4)
+2026-05-06 15:52:17,050 [INFO] OCREngine: Cargando modelo REC v5 [latin] de latin
+2026-05-06 15:52:17,050 [INFO] Inicializando RapidOCR (OpenVINO) ó Dispositivo: GPU
+2026-05-06 15:52:18,890 [INFO] RapidOCR inicializado correctamente en GPU
+2026-05-06 15:52:18,895 [INFO] Iniciando carga de Argos Translate...
+2026-05-06 15:52:23,085 [INFO] ('get_installed_languages',)
+2026-05-06 15:52:23,087 [INFO] Idiomas instalados refrescados: ['en', 'ja', 'es']
+2026-05-06 15:52:23,087 [INFO] Argos Translate cargado correctamente.
+2026-05-06 15:52:38,230 [INFO] Idiomas instalados refrescados: ['en', 'ja', 'es']
+2026-05-06 15:52:41,120 [INFO] Tiempos OCR (OpenVINO): Det=1.469s, Rec=0.000s, Total=1.544s
+2026-05-06 15:52:41,374 [INFO] Traduciendo [en -> es]: '79...'
+2026-05-06 15:52:41,624 [INFO] ('paragraphs:', ['79'])
+2026-05-06 15:52:41,624 [INFO] ('apply_packaged_translation', '79')
+2026-05-06 15:52:41,624 [INFO] ('Splitting sentences using SBD Model: (en) StanzaSentencizer',)
+2026-05-06 15:52:44,920 [WARNING] Language en package default expects mwt, which has been added
+2026-05-06 15:52:48,975 [INFO] ('sentences', ['79'])
+2026-05-06 15:52:49,047 [INFO] ('tokenized', [['\u258179']])
+2026-05-06 15:52:49,075 [INFO] ('translated_batches', [TranslationResult(hypotheses=[['\u258179']], scores=[-0.18719840049743652], attention=[], logits=[])])
+2026-05-06 15:52:49,075 [INFO] ('value_hypotheses:', [('79', -0.18719840049743652)])
+2026-05-06 15:52:49,075 [INFO] ('translated_paragraphs:', [[('79', -0.18719840049743652)]])
+2026-05-06 15:52:49,075 [INFO] ('hypotheses_to_return:', [('79', -0.18719840049743652)])
+2026-05-06 15:52:49,075 [INFO] Resultado: '79...'
+2026-05-06 15:52:59,293 [INFO] Tiempos OCR (OpenVINO): Det=0.986s, Rec=0.000s, Total=3.148s
+2026-05-06 15:53:01,135 [INFO] Traduciendo [en -> es]: 'Gemini 3 Flash...'
+2026-05-06 15:53:01,135 [INFO] ('paragraphs:', ['Gemini 3 Flash'])
+2026-05-06 15:53:01,135 [INFO] ('apply_packaged_translation', 'Gemini 3 Flash')
+2026-05-06 15:53:01,135 [INFO] ('Splitting sentences using SBD Model: (en) StanzaSentencizer',)
+2026-05-06 15:53:01,141 [INFO] ('sentences', ['Gemini 3 Flash'])
+2026-05-06 15:53:01,141 [INFO] ('tokenized', [['\u2581Ge', 'mini', '\u25813', '\u2581Flash']])
+2026-05-06 15:53:01,182 [INFO] ('translated_batches', [TranslationResult(hypotheses=[['\u2581Ge', 'mini', '\u25813', '\u2581Flash']], scores=[-1.027217984199524], attention=[], logits=[])])
+2026-05-06 15:53:01,182 [INFO] ('value_hypotheses:', [('Gemini 3 Flash', -1.027217984199524)])
+2026-05-06 15:53:01,182 [INFO] ('translated_paragraphs:', [[('Gemini 3 Flash', -1.027217984199524)]])
+2026-05-06 15:53:01,183 [INFO] ('hypotheses_to_return:', [('Gemini 3 Flash', -1.027217984199524)])
+2026-05-06 15:53:01,183 [INFO] Resultado: 'Gemini 3 Flash...'
+2026-05-06 15:53:02,499 [INFO] Traduciendo [en -> es]: 'grid.Add(self.trans_to, 1, wx....'
+2026-05-06 15:53:02,499 [INFO] ('paragraphs:', ['grid.Add(self.trans_to, 1, wx.EXPAND)'])
+2026-05-06 15:53:02,499 [INFO] ('apply_packaged_translation', 'grid.Add(self.trans_to, 1, wx.EXPAND)')
+2026-05-06 15:53:02,499 [INFO] ('Splitting sentences using SBD Model: (en) StanzaSentencizer',)
+2026-05-06 15:53:02,511 [INFO] ('sentences', ['grid.Add(self.trans_to, 1, wx.EXPAND)'])
+2026-05-06 15:53:02,511 [INFO] ('tokenized', [['\u2581grid', '.', 'Add', '(', 'self', '.', 'trans', '_', 'to', ',', '\u25811,', '\u2581w', 'x', '.', 'EX', 'P', 'AND', ')']])
+2026-05-06 15:53:02,627 [INFO] ('translated_batches', [TranslationResult(hypotheses=[['\u2581grid', '.', 'Add', '(', 'self', '.', 'trans', '_', 'to', ',', '\u25811,', '\u2581w', 'x', '.', 'EX', 'P', 'AND', ')']], scores=[-1.5311188697814941], attention=[], logits=[])])
+2026-05-06 15:53:02,627 [INFO] ('value_hypotheses:', [('grid.Add(self.trans to, 1, wx.EXPAND)', -1.5311188697814941)])
+2026-05-06 15:53:02,627 [INFO] ('translated_paragraphs:', [[('grid.Add(self.trans to, 1, wx.EXPAND)', -1.5311188697814941)]])
+2026-05-06 15:53:02,627 [INFO] ('hypotheses_to_return:', [('grid.Add(self.trans to, 1, wx.EXPAND)', -1.5311188697814941)])
+2026-05-06 15:53:02,627 [INFO] Resultado: 'grid.Add(self.trans to, 1, wx....'
+2026-05-06 15:53:03,116 [INFO] Traduciendo [en -> es]: '179...'
+2026-05-06 15:53:03,116 [INFO] ('paragraphs:', ['179'])
+2026-05-06 15:53:03,117 [INFO] ('apply_packaged_translation', '179')
+2026-05-06 15:53:03,117 [INFO] ('Splitting sentences using SBD Model: (en) StanzaSentencizer',)
+2026-05-06 15:53:03,132 [INFO] ('sentences', ['179'])
+2026-05-06 15:53:03,132 [INFO] ('tokenized', [['\u258117', '9']])
+2026-05-06 15:53:03,211 [INFO] ('translated_batches', [TranslationResult(hypotheses=[['\u258117', '9']], scores=[-0.13875818252563477], attention=[], logits=[])])
+2026-05-06 15:53:03,212 [INFO] ('value_hypotheses:', [('179', -0.13875818252563477)])
+2026-05-06 15:53:03,212 [INFO] ('translated_paragraphs:', [[('179', -0.13875818252563477)]])
+2026-05-06 15:53:03,213 [INFO] ('hypotheses_to_return:', [('179', -0.13875818252563477)])
+2026-05-06 15:53:03,213 [INFO] Resultado: '179...'
+2026-05-06 15:53:03,728 [INFO] Traduciendo [en -> es]: 'self.trans_to.Bind(wx.EVT_CHoI...'
+2026-05-06 15:53:03,729 [INFO] ('paragraphs:', ['self.trans_to.Bind(wx.EVT_CHoICE, self.update_trans_ui)'])
+2026-05-06 15:53:03,729 [INFO] ('apply_packaged_translation', 'self.trans_to.Bind(wx.EVT_CHoICE, self.update_trans_ui)')
+2026-05-06 15:53:03,730 [INFO] ('Splitting sentences using SBD Model: (en) StanzaSentencizer',)
+2026-05-06 15:53:03,751 [INFO] ('sentences', ['self.trans_to.Bind(wx.EVT_CHoICE, self.update_trans_ui)'])
+2026-05-06 15:53:03,752 [INFO] ('tokenized', [['\u2581self', '.', 'trans', '_', 'to', '.', 'Bi', 'nd', '(', 'w', 'x', '.', 'E', 'V', 'T', '_', 'CH', 'o', 'ICE', ',', '\u2581self', '.', 'up', 'date', '_', 'trans', '_', 'ui', ')']])
+2026-05-06 15:53:04,021 [INFO] ('translated_batches', [TranslationResult(hypotheses=[['\u2581auto', '.', 'trans', '_', 'to', '.', 'Bi', 'nd', '(', 'w', 'x', '.', 'E', 'V', 'T', '_', 'CH', 'o', 'ICE', ',', '\u2581self', '.', 'up', 'date', '_', 'trans', '_', 'ui', ')']], scores=[-2.37748646736145], attention=[], logits=[])])
+2026-05-06 15:53:04,021 [INFO] ('value_hypotheses:', [('auto.trans to.Bind(wx.EVT CHoICE, self.update trans ui)', -2.37748646736145)])
+2026-05-06 15:53:04,021 [INFO] ('translated_paragraphs:', [[('auto.trans to.Bind(wx.EVT CHoICE, self.update trans ui)', -2.37748646736145)]])
+2026-05-06 15:53:04,021 [INFO] ('hypotheses_to_return:', [('auto.trans to.Bind(wx.EVT CHoICE, self.update trans ui)', -2.37748646736145)])
+2026-05-06 15:53:04,021 [INFO] Resultado: 'auto.trans to.Bind(wx.EVT CHoI...'
+2026-05-06 15:53:04,425 [INFO] Traduciendo [en -> es]: '178...'
+2026-05-06 15:53:04,425 [INFO] ('paragraphs:', ['178'])
+2026-05-06 15:53:04,425 [INFO] ('apply_packaged_translation', '178')
+2026-05-06 15:53:04,426 [INFO] ('Splitting sentences using SBD Model: (en) StanzaSentencizer',)
+2026-05-06 15:53:04,434 [INFO] ('sentences', ['178'])
+2026-05-06 15:53:04,435 [INFO] ('tokenized', [['\u2581178']])
+2026-05-06 15:53:04,482 [INFO] ('translated_batches', [TranslationResult(hypotheses=[['\u2581178']], scores=[-0.17267616093158722], attention=[], logits=[])])
+2026-05-06 15:53:04,483 [INFO] ('value_hypotheses:', [('178', -0.17267616093158722)])
+2026-05-06 15:53:04,483 [INFO] ('translated_paragraphs:', [[('178', -0.17267616093158722)]])
+2026-05-06 15:53:04,483 [INFO] ('hypotheses_to_return:', [('178', -0.17267616093158722)])
+2026-05-06 15:53:04,483 [INFO] Resultado: '178...'
+2026-05-06 15:53:05,598 [INFO] Traduciendo [en -> es]: 'Ask anything, @ to mention, / ...'
+2026-05-06 15:53:05,599 [INFO] ('paragraphs:', ['Ask anything, @ to mention, / for workflows'])
+2026-05-06 15:53:05,599 [INFO] ('apply_packaged_translation', 'Ask anything, @ to mention, / for workflows')
+2026-05-06 15:53:05,599 [INFO] ('Splitting sentences using SBD Model: (en) StanzaSentencizer',)
+2026-05-06 15:53:05,617 [INFO] ('sentences', ['Ask anything, @ to mention, / for workflows'])
+2026-05-06 15:53:05,618 [INFO] ('tokenized', [['\u2581Ask', '\u2581anything', ',', '\u2581@', '\u2581to', '\u2581mention', ',', '\u2581/', '\u2581for', '\u2581work', 'flow', 's']])
+2026-05-06 15:53:05,761 [INFO] ('translated_batches', [TranslationResult(hypotheses=[['\u2581Pregunta', 'r', '\u2581cualquier', '\u2581cosa', ',', '\u2581@', '\u2581mencionar', ',', '\u2581/', '\u2581para', '\u2581flujo', 's', '\u2581de', '\u2581trabajo']], scores=[-3.418800115585327], attention=[], logits=[])])
+2026-05-06 15:53:05,761 [INFO] ('value_hypotheses:', [('Preguntar cualquier cosa, @ mencionar, / para flujos de trabajo', -3.418800115585327)])
+2026-05-06 15:53:05,761 [INFO] ('translated_paragraphs:', [[('Preguntar cualquier cosa, @ mencionar, / para flujos de trabajo', -3.418800115585327)]])
+2026-05-06 15:53:05,761 [INFO] ('hypotheses_to_return:', [('Preguntar cualquier cosa, @ mencionar, / para flujos de trabajo', -3.418800115585327)])
+2026-05-06 15:53:05,762 [INFO] Resultado: 'Preguntar cualquier cosa, @ me...'
+2026-05-06 15:53:56,611 [INFO] ('get_installed_languages',)
+2026-05-06 15:53:56,612 [INFO] Idiomas instalados refrescados: ['en', 'ja']
+2026-05-06 15:53:59,676 [INFO] Idiomas instalados refrescados: ['en', 'ja']
+2026-05-06 15:54:14,270 [INFO] TTS: Ruta de sonidos configurada en D:\proyectos\Paddle OCR\src\assets\sounds
+2026-05-06 15:54:14,477 [INFO] Successfully loaded COM object: SAPI.SPVoice
+2026-05-06 15:54:14,481 [INFO] TTS: accessible_output2 inicializado (lector de pantalla detectado)
+2026-05-06 15:54:14,699 [INFO] OCREngine: LÛgica de Pisos activada -> LÌmite: 1600 (Res: 1536, Escala: 1.00, Piso: 1600)
+2026-05-06 15:54:14,699 [INFO] OCREngine: Usando detector interno de la librerÌa (Mobile V4)
+2026-05-06 15:54:14,699 [INFO] OCREngine: Cargando modelo REC v5 [latin] de latin
+2026-05-06 15:54:14,699 [INFO] Inicializando RapidOCR (OpenVINO) ó Dispositivo: GPU
+2026-05-06 15:54:16,388 [INFO] RapidOCR inicializado correctamente en GPU
+2026-05-06 15:54:28,371 [INFO] Iniciando carga de Argos Translate...
+2026-05-06 15:54:32,022 [INFO] ('get_installed_languages',)
+2026-05-06 15:54:32,023 [INFO] Idiomas instalados refrescados: ['en', 'ja']
+2026-05-06 15:54:32,023 [INFO] Argos Translate cargado correctamente.
+2026-05-06 15:54:44,853 [INFO] ('get_installed_languages',)
+2026-05-06 15:54:44,855 [INFO] Idiomas instalados refrescados: ['en', 'ja', 'es']
+2026-05-06 15:54:46,832 [INFO] Idiomas instalados refrescados: ['en', 'ja', 'es']
+2026-05-06 15:54:49,968 [INFO] Tiempos OCR (OpenVINO): Det=1.447s, Rec=0.000s, Total=1.520s
+2026-05-06 15:54:57,892 [INFO] Tiempos OCR (OpenVINO): Det=1.004s, Rec=0.000s, Total=3.364s
+2026-05-06 15:56:25,910 [INFO] TTS: Ruta de sonidos configurada en D:\proyectos\Paddle OCR\src\assets\sounds
+2026-05-06 15:56:26,072 [INFO] Successfully loaded COM object: SAPI.SPVoice
+2026-05-06 15:56:26,076 [INFO] TTS: accessible_output2 inicializado (lector de pantalla detectado)
+2026-05-06 15:56:26,288 [INFO] OCREngine: LÛgica de Pisos activada -> LÌmite: 1600 (Res: 1536, Escala: 1.00, Piso: 1600)
+2026-05-06 15:56:26,288 [INFO] OCREngine: Usando detector interno de la librerÌa (Mobile V4)
+2026-05-06 15:56:26,289 [INFO] OCREngine: Cargando modelo REC v5 [latin] de latin
+2026-05-06 15:56:26,289 [INFO] Inicializando RapidOCR (OpenVINO) ó Dispositivo: GPU
+2026-05-06 15:56:27,967 [INFO] RapidOCR inicializado correctamente en GPU
+2026-05-06 15:56:27,968 [INFO] Iniciando carga de Argos Translate...
+2026-05-06 15:56:31,723 [INFO] ('get_installed_languages',)
+2026-05-06 15:56:31,724 [INFO] Idiomas instalados refrescados: ['en', 'ja', 'es']
+2026-05-06 15:56:31,725 [INFO] Argos Translate cargado correctamente.
+2026-05-06 15:56:38,906 [INFO] ('get_installed_languages',)
+2026-05-06 15:56:38,907 [INFO] Idiomas instalados refrescados: ['en', 'ja']
+2026-05-06 15:56:44,968 [INFO] Idiomas instalados refrescados: ['en', 'ja']
+2026-05-06 15:56:57,583 [INFO] TTS: Ruta de sonidos configurada en D:\proyectos\Paddle OCR\src\assets\sounds
+2026-05-06 15:56:57,851 [INFO] Successfully loaded COM object: SAPI.SPVoice
+2026-05-06 15:56:57,856 [INFO] TTS: accessible_output2 inicializado (lector de pantalla detectado)
+2026-05-06 15:56:58,279 [INFO] OCREngine: LÛgica de Pisos activada -> LÌmite: 1600 (Res: 1536, Escala: 1.00, Piso: 1600)
+2026-05-06 15:56:58,279 [INFO] OCREngine: Usando detector interno de la librerÌa (Mobile V4)
+2026-05-06 15:56:58,279 [INFO] OCREngine: Cargando modelo REC v5 [latin] de latin
+2026-05-06 15:56:58,279 [INFO] Inicializando RapidOCR (OpenVINO) ó Dispositivo: GPU
+2026-05-06 15:57:00,072 [INFO] RapidOCR inicializado correctamente en GPU
+2026-05-06 15:57:00,259 [INFO] Iniciando carga de Argos Translate...
+2026-05-06 15:57:04,031 [INFO] ('get_installed_languages',)
+2026-05-06 15:57:04,032 [INFO] Idiomas instalados refrescados: ['en', 'ja']
+2026-05-06 15:57:04,032 [INFO] Argos Translate cargado correctamente.
+2026-05-06 15:57:15,172 [INFO] ('get_installed_languages',)
+2026-05-06 15:57:15,175 [INFO] Idiomas instalados refrescados: ['en', 'ja', 'es']
+2026-05-06 15:57:16,754 [INFO] Idiomas instalados refrescados: ['en', 'ja', 'es']
+2026-05-06 15:57:19,567 [INFO] Tiempos OCR (OpenVINO): Det=1.471s, Rec=0.000s, Total=1.584s
+2026-05-06 15:57:25,935 [INFO] Tiempos OCR (OpenVINO): Det=1.006s, Rec=0.000s, Total=2.735s
+2026-05-06 15:58:28,983 [INFO] ('get_installed_languages',)
+2026-05-06 15:58:28,984 [INFO] Idiomas instalados refrescados: ['en', 'ja']
+2026-05-06 15:58:32,778 [INFO] Idiomas instalados refrescados: ['en', 'ja']
+2026-05-06 15:59:53,356 [INFO] TTS: Ruta de sonidos configurada en D:\proyectos\Paddle OCR\src\assets\sounds
+2026-05-06 15:59:53,558 [INFO] Successfully loaded COM object: SAPI.SPVoice
+2026-05-06 15:59:53,561 [INFO] TTS: accessible_output2 inicializado (lector de pantalla detectado)
+2026-05-06 15:59:53,802 [INFO] OCREngine: LÛgica de Pisos activada -> LÌmite: 1600 (Res: 1536, Escala: 1.00, Piso: 1600)
+2026-05-06 15:59:53,803 [INFO] OCREngine: Usando detector interno de la librerÌa (Mobile V4)
+2026-05-06 15:59:53,803 [INFO] OCREngine: Cargando modelo REC v5 [latin] de latin
+2026-05-06 15:59:53,803 [INFO] Inicializando RapidOCR (OpenVINO) ó Dispositivo: GPU
+2026-05-06 15:59:55,530 [INFO] RapidOCR inicializado correctamente en GPU
+2026-05-06 16:00:00,268 [INFO] Iniciando carga de Argos Translate...
+2026-05-06 16:00:04,117 [INFO] ('get_installed_languages',)
+2026-05-06 16:00:04,118 [INFO] Idiomas instalados refrescados: ['en', 'ja']
+2026-05-06 16:00:04,118 [INFO] Argos Translate cargado correctamente.
+2026-05-06 16:00:15,585 [INFO] ('get_installed_languages',)
+2026-05-06 16:00:15,587 [INFO] Idiomas instalados refrescados: ['en', 'ja', 'es']
+2026-05-06 16:00:19,954 [INFO] ('get_installed_languages',)
+2026-05-06 16:00:19,955 [INFO] Idiomas instalados refrescados: ['en', 'ja', 'es']
+2026-05-06 16:00:27,047 [INFO] Tiempos OCR (OpenVINO): Det=1.565s, Rec=0.000s, Total=3.367s
+2026-05-06 16:01:01,423 [INFO] ('get_installed_languages',)
+2026-05-06 16:01:01,424 [INFO] Idiomas instalados refrescados: ['en', 'ja']
+2026-05-06 16:01:07,577 [INFO] ('get_installed_languages',)
+2026-05-06 16:01:07,578 [INFO] Idiomas instalados refrescados: ['en', 'ja']
+2026-05-06 16:02:49,677 [INFO] ('get_installed_languages',)
+2026-05-06 16:02:49,679 [INFO] Idiomas instalados refrescados: ['en', 'ja', 'es']
+2026-05-06 16:02:53,341 [INFO] ('get_installed_languages',)
+2026-05-06 16:02:53,343 [INFO] Idiomas instalados refrescados: ['en', 'ja', 'es']
+2026-05-06 16:02:55,665 [INFO] Tiempos OCR (OpenVINO): Det=0.982s, Rec=0.000s, Total=1.064s
+2026-05-06 16:03:00,393 [INFO] Tiempos OCR (OpenVINO): Det=1.051s, Rec=0.000s, Total=2.018s
+2026-05-06 16:03:09,766 [INFO] Tiempos OCR (OpenVINO): Det=1.027s, Rec=0.000s, Total=2.653s
+2026-05-06 16:04:07,041 [INFO] Iniciando carga de Argos Translate...
+2026-05-06 16:04:11,375 [INFO] Idiomas refrescados: ['en', 'ja', 'es']
+2026-05-06 16:04:11,375 [INFO] Argos Translate cargado correctamente.
+2026-05-06 16:04:17,134 [INFO] SOLICITUD: en -> es | Texto: 'Gemini 3 Flash...'
+2026-05-06 16:04:22,045 [INFO] √âXITO: 'Gemini 3 Flash...'
+2026-05-06 16:04:22,798 [INFO] SOLICITUD: en -> es | Texto: 'main.Dv Alt+L >...'
+2026-05-06 16:04:22,976 [INFO] √âXITO: 'principal.Dv Alt+L >...'
+2026-05-06 16:04:24,133 [INFO] SOLICITUD: en -> es | Texto: 'logger.error(f"Er View 1 edite...'
+2026-05-06 16:04:24,266 [INFO] √âXITO: 'logger.error(f"Er Ver 1 archiv...'
+2026-05-06 16:04:25,028 [INFO] SOLICITUD: en -> es | Texto: 'main.Dv Alt+L >...'
+2026-05-06 16:04:25,116 [INFO] √âXITO: 'principal.Dv Alt+L >...'
+2026-05-06 16:04:26,819 [INFO] SOLICITUD: en -> es | Texto: 'logger.error(f"Er View 1 edite...'
+2026-05-06 16:04:26,950 [INFO] √âXITO: 'logger.error(f"Er Ver 1 archiv...'
+2026-05-06 16:04:27,173 [INFO] SOLICITUD: en -> es | Texto: '36...'
+2026-05-06 16:04:27,304 [INFO] √âXITO: '36...'
+2026-05-06 16:04:27,904 [INFO] SOLICITUD: en -> es | Texto: 'except Exception as e...'
+2026-05-06 16:04:27,990 [INFO] √âXITO: 'Excepto la Excepci√≥n...'
+2026-05-06 16:04:28,226 [INFO] SOLICITUD: en -> es | Texto: '35...'
+2026-05-06 16:04:28,279 [INFO] √âXITO: '35...'
+2026-05-06 16:04:28,642 [INFO] SOLICITUD: en -> es | Texto: 'Ask anything, @ to mention, / ...'
+2026-05-06 16:04:28,989 [INFO] √âXITO: 'Preguntar cualquier cosa, @ me...'
+2026-05-06 16:04:29,295 [INFO] SOLICITUD: en -> es | Texto: 'self._available_languages = js...'
+2026-05-06 16:04:29,490 [INFO] √âXITO: 'auto. available languages = js...'
+2026-05-06 16:04:29,662 [INFO] SOLICITUD: en -> es | Texto: '34...'
+2026-05-06 16:04:29,700 [INFO] √âXITO: '34...'
+2026-05-06 16:04:30,050 [INFO] SOLICITUD: en -> es | Texto: 'self._available_languages = js...'
+2026-05-06 16:04:30,239 [INFO] √âXITO: 'auto. available languages = js...'
+2026-05-06 16:04:30,281 [INFO] SOLICITUD: en -> es | Texto: 'Ask anything, @ to mention, / ...'
+2026-05-06 16:04:30,421 [INFO] √âXITO: 'Preguntar cualquier cosa, @ me...'
+2026-05-06 16:04:39,593 [INFO] Iniciando carga de Argos Translate...
+2026-05-06 16:04:43,364 [INFO] Idiomas refrescados: ['en', 'ja', 'es']
+2026-05-06 16:04:43,365 [INFO] Argos Translate cargado correctamente.
+2026-05-06 16:05:07,077 [INFO] Idiomas refrescados: ['en', 'ja']
+2026-05-06 16:05:12,035 [INFO] Idiomas refrescados: ['en', 'ja']
+2026-05-06 16:05:15,520 [INFO] SOLICITUD: en -> es | Texto: '82...'
+2026-05-06 16:05:15,520 [WARNING] Idiomas no encontrados (en, es). Refrescando...
+2026-05-06 16:05:15,533 [INFO] Idiomas refrescados: ['en', 'ja']
+2026-05-06 16:05:15,533 [ERROR] No se pudieron encontrar los objetos Language tras refresco.
+2026-05-06 16:05:16,105 [INFO] SOLICITUD: en -> es | Texto: '82...'
+2026-05-06 16:05:16,106 [WARNING] Idiomas no encontrados (en, es). Refrescando...
+2026-05-06 16:05:16,112 [INFO] Idiomas refrescados: ['en', 'ja']
+2026-05-06 16:05:16,113 [ERROR] No se pudieron encontrar los objetos Language tras refresco.
+2026-05-06 16:05:19,509 [INFO] SOLICITUD: en -> es | Texto: 'Escribe un mensaje...'
+2026-05-06 16:05:19,510 [WARNING] Idiomas no encontrados (en, es). Refrescando...
+2026-05-06 16:05:19,515 [INFO] Idiomas refrescados: ['en', 'ja']
+2026-05-06 16:05:19,515 [ERROR] No se pudieron encontrar los objetos Language tras refresco.
+2026-05-06 16:05:19,684 [INFO] SOLICITUD: en -> es | Texto: '+...'
+2026-05-06 16:05:19,685 [WARNING] Idiomas no encontrados (en, es). Refrescando...
+2026-05-06 16:05:19,696 [INFO] Idiomas refrescados: ['en', 'ja']
+2026-05-06 16:05:19,698 [ERROR] No se pudieron encontrar los objetos Language tras refresco.
+2026-05-06 16:05:19,849 [INFO] SOLICITUD: en -> es | Texto: '16:01...'
+2026-05-06 16:05:19,851 [WARNING] Idiomas no encontrados (en, es). Refrescando...
+2026-05-06 16:05:19,863 [INFO] Idiomas refrescados: ['en', 'ja']
+2026-05-06 16:05:19,865 [ERROR] No se pudieron encontrar los objetos Language tras refresco.
+2026-05-06 16:05:20,011 [INFO] SOLICITUD: en -> es | Texto: 'yyy qu√© s√© yo, es mutuooo...'
+2026-05-06 16:05:20,014 [WARNING] Idiomas no encontrados (en, es). Refrescando...
+2026-05-06 16:05:20,026 [INFO] Idiomas refrescados: ['en', 'ja']
+2026-05-06 16:05:20,028 [ERROR] No se pudieron encontrar los objetos Language tras refresco.
+2026-05-06 16:05:20,175 [INFO] SOLICITUD: en -> es | Texto: '16:01 /...'
+2026-05-06 16:05:20,176 [WARNING] Idiomas no encontrados (en, es). Refrescando...
+2026-05-06 16:05:20,181 [INFO] Idiomas refrescados: ['en', 'ja']
+2026-05-06 16:05:20,181 [ERROR] No se pudieron encontrar los objetos Language tras refresco.
+2026-05-06 16:05:20,545 [INFO] SOLICITUD: en -> es | Texto: 'yyy qu√© s√© yo, es mutuooo...'
+2026-05-06 16:05:20,548 [WARNING] Idiomas no encontrados (en, es). Refrescando...
+2026-05-06 16:05:20,561 [INFO] Idiomas refrescados: ['en', 'ja']
+2026-05-06 16:05:20,562 [ERROR] No se pudieron encontrar los objetos Language tras refresco.
+2026-05-06 16:08:16,678 [INFO] --- INICIANDO TRADUCTOR ---
+2026-05-06 16:08:20,330 [INFO] Refrescando paquetes desde el disco...
+2026-05-06 16:08:20,331 [INFO] Idiomas detectados: ['en', 'ja']
+2026-05-06 16:08:20,331 [INFO] Motor Argos inicializado.
+2026-05-06 16:08:32,462 [INFO] Instalando paquete: C:\Users\Kev\AppData\Local\Temp\tmpdsdnlxwy.argosmodel
+2026-05-06 16:08:33,228 [INFO] Descarga finalizada. Refrescando motor...
+2026-05-06 16:08:33,229 [INFO] Refrescando paquetes desde el disco...
+2026-05-06 16:08:33,231 [INFO] Idiomas detectados: ['en', 'ja', 'es']
+2026-05-06 16:08:36,363 [INFO] Refrescando paquetes desde el disco...
+2026-05-06 16:08:36,364 [INFO] Idiomas detectados: ['en', 'ja', 'es']
+2026-05-06 19:36:05,142 [INFO] --- INICIANDO TRADUCTOR ---
+2026-05-06 19:36:14,665 [INFO] Idiomas detectados: ['en', 'ja', 'es']
+2026-05-06 19:36:14,667 [INFO] Motor Argos listo.
+2026-05-06 19:36:14,668 [INFO] Actualizando cat√°logo de idiomas...
+2026-05-06 19:36:14,821 [INFO] Cat√°logo actualizado y guardado.
+2026-05-06 19:36:17,539 [INFO] Solicitud de descarga: en -> es
+2026-05-06 19:36:17,699 [INFO] Descargando paquete 1/1: en -> es
+2026-05-06 19:36:29,296 [INFO] Instalando C:\Users\Kev\AppData\Local\Temp\tmpukmzfmd7.argosmodel...
+2026-05-06 19:36:30,081 [INFO] Descarga e instalaci√≥n completada.
+2026-05-06 19:36:30,085 [INFO] Idiomas detectados: ['en', 'ja', 'es']
+2026-05-06 19:36:35,177 [INFO] --- INICIANDO TRADUCTOR ---
+2026-05-06 19:36:38,589 [INFO] Idiomas detectados: ['en', 'ja', 'es']
+2026-05-06 19:36:38,590 [INFO] Motor Argos listo.
+2026-05-06 19:36:38,591 [INFO] Actualizando cat√°logo de idiomas...
+2026-05-06 19:36:38,709 [INFO] Cat√°logo actualizado y guardado.
+2026-05-06 19:42:35,162 [INFO] --- INICIANDO TRADUCTOR ---
+2026-05-06 19:42:40,455 [INFO] Idiomas detectados: ['en', 'ja', 'es']
+2026-05-06 19:42:40,456 [INFO] Motor Argos listo.
+2026-05-06 19:44:49,162 [INFO] --- INICIANDO TRADUCTOR ---
+2026-05-06 19:44:55,189 [INFO] Idiomas detectados: ['en', 'ja', 'es']
+2026-05-06 19:44:55,190 [INFO] Motor Argos listo.
+2026-05-06 19:46:27,764 [INFO] --- INICIANDO TRADUCTOR ---
+2026-05-06 19:46:33,569 [INFO] Idiomas detectados: ['en', 'ja', 'es']
+2026-05-06 19:46:33,570 [INFO] Motor Argos listo.
+2026-05-06 19:47:21,359 [INFO] --- INICIANDO TRADUCTOR ---
+2026-05-06 19:47:25,094 [INFO] Idiomas detectados: ['en', 'ja', 'es']
+2026-05-06 19:47:25,094 [INFO] Motor Argos listo.
+2026-05-06 19:47:32,241 [INFO] Idiomas detectados: ['en', 'ja', 'es']
+2026-05-06 19:52:08,568 [INFO] --- INICIANDO TRADUCTOR ---
+2026-05-06 19:52:12,223 [INFO] Idiomas detectados: ['en', 'ja', 'es']
+2026-05-06 19:52:12,223 [INFO] Motor Argos listo.
+2026-05-06 19:52:25,803 [INFO] Idiomas detectados: ['en', 'ja', 'es']
+2026-05-06 19:52:36,880 [INFO] Idiomas detectados: ['en', 'ja', 'es']
+2026-05-06 19:53:02,531 [INFO] Idiomas detectados: ['en', 'ja', 'es']
+2026-05-06 19:53:19,754 [INFO] Idiomas detectados: ['en', 'ja', 'es']
+2026-05-06 19:53:35,422 [INFO] Idiomas detectados: ['en', 'ja', 'es']
+2026-05-06 19:53:49,612 [INFO] Idiomas detectados: ['en', 'ja', 'es']
