@@ -42,6 +42,7 @@ DEFAULT_CONFIG = {
         "hotkey_shadow_learn": "ctrl+alt+l",
         "hotkey_shadow_clear": "ctrl+alt+r",
         "hotkey_shadow_toggle": "ctrl+alt+u",
+        "shadow_burst_count": 4,
         "key_copy": "ctrl+c",
         "key_first": "home",
         "key_last": "end",

@@ -86,7 +86,7 @@ class PaddleOCRScanner:
         self.tts.speak("Cargando scanner.")
         try:
             self.ocr.initialize()
-            translator_instance.set_on_ready_callback(lambda: self.tts.speak("Motor de traducción listo."))
+            translator_instance.set_on_ready_callback(lambda: self.tts.speak("Motor de traducción listo.") if self.config.get("translate_enabled") else None)
             
             if self.config.get("translate_enabled"):
                 self.tts.speak("Iniciando motor de traducción.")
@@ -146,7 +146,8 @@ class PaddleOCRScanner:
         app_name = self._get_current_app_name(); self.shadow.set_app(app_name)
         self.tts.speak("Aprendizaje iniciado.")
         burst_results = []
-        for i in range(4):
+        burst_count = int(self.config.get("shadow_burst_count", 4))
+        for i in range(burst_count):
             try:
                 img, ox, oy = capture_screen(); elements = self.ocr.scan_image(img)
                 burst_results.append(elements); self.tts.play_scan_start()

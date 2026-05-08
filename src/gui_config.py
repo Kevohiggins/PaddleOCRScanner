@@ -108,6 +108,7 @@ class ConfigWindow(wx.Dialog):
         self._setup_general_tab(); self._setup_keys_tab(); self._setup_ocr_tab(); self._setup_dynamic_tab()
         self._setup_trans_tab()
         main_sizer.Add(self.tabs, 1, wx.EXPAND | wx.ALL, 10)
+        self.tabs.Bind(wx.EVT_NOTEBOOK_PAGE_CHANGED, self.on_tab_changed)
         
         # Botones Finales
         btn_sizer = wx.StdDialogButtonSizer()
@@ -118,6 +119,16 @@ class ConfigWindow(wx.Dialog):
         
         self.SetSizer(main_sizer); self.update_ui_from_config()
         self.Bind(wx.EVT_BUTTON, self.on_save, id=wx.ID_OK)
+
+    def on_tab_changed(self, event):
+        if self.tabs.GetPageText(event.GetSelection()) == "Traducción":
+            from translator import translator_instance
+            if not translator_instance._initialized and not translator_instance._initializing:
+                translator_instance.ensure_initialized()
+                def safe_update():
+                    if self: self.update_trans_ui()
+                wx.CallLater(2000, safe_update)
+        event.Skip()
         
         self.Raise()
         self.SetFocus()
@@ -154,6 +165,7 @@ class ConfigWindow(wx.Dialog):
         sizer = wx.BoxSizer(wx.VERTICAL); grid = wx.FlexGridSizer(cols=2, vgap=15, hgap=10); grid.AddGrowableCol(1)
         self.min_conf = self._add_spin(self.tab_ocr, grid, "Confianza mínima (1-100%):", 1, 100)
         self.row_tol = self._add_spin(self.tab_ocr, grid, "Agrupar filas (Tolerancia en px):", 1, 200)
+        self.shadow_burst = self._add_spin(self.tab_ocr, grid, "Fotos para aprendizaje del modo sombra (2-15):", 2, 15)
         grid.Add(wx.StaticText(self.tab_ocr, label="Escala de imagen:"), 0, wx.ALIGN_CENTER_VERTICAL)
         self.scale_choice = wx.Choice(self.tab_ocr, choices=[
             "Baja: La más rápida (35%)", "Media: Muy rápida (50%)", "Alta: Rápido y preciso (75%)",
@@ -175,8 +187,6 @@ class ConfigWindow(wx.Dialog):
         sizer.Add(grid, 1, wx.EXPAND | wx.ALL, 20); self.tab_dynamic.SetSizer(sizer)
 
     def _setup_trans_tab(self):
-        from translator import translator_instance
-        translator_instance.ensure_initialized()
         sizer = wx.BoxSizer(wx.VERTICAL); grid = wx.FlexGridSizer(cols=2, vgap=20, hgap=10); grid.AddGrowableCol(1)
         
         self.trans_enabled = wx.CheckBox(self.tab_trans, label="Activar traducción automática (Local)")
@@ -281,6 +291,7 @@ class ConfigWindow(wx.Dialog):
         self.crop_t.SetValue(int(c.get("crop_top", 0))); self.crop_b.SetValue(int(c.get("crop_bottom", 0)))
         self.crop_l.SetValue(int(c.get("crop_left", 0))); self.crop_r.SetValue(int(c.get("crop_right", 0)))
         self.row_tol.SetValue(int(c.get("row_tolerance", 20)))
+        self.shadow_burst.SetValue(int(c.get("shadow_burst_count", 4)))
         self.dyn_target.SetSelection(0 if c.get("dynamic_target", "screen") == "screen" else 1)
         self.dyn_interval.SetValue(int(c.get("dynamic_interval", 1.0) * 10)); self.dyn_sens.SetValue(int(c.get("dynamic_sensitivity", 50)))
         self.trans_enabled.SetValue(c.get("translate_enabled", False))
@@ -298,6 +309,7 @@ class ConfigWindow(wx.Dialog):
         self.temp_config["crop_top"] = self.crop_t.GetValue(); self.temp_config["crop_bottom"] = self.crop_b.GetValue()
         self.temp_config["crop_left"] = self.crop_l.GetValue(); self.temp_config["crop_right"] = self.crop_r.GetValue()
         self.temp_config["row_tolerance"] = self.row_tol.GetValue()
+        self.temp_config["shadow_burst_count"] = self.shadow_burst.GetValue()
         self.temp_config["dynamic_target"] = "screen" if self.dyn_target.GetSelection() == 0 else "window"
         self.temp_config["dynamic_interval"] = self.dyn_interval.GetValue() / 10.0; self.temp_config["dynamic_sensitivity"] = self.dyn_sens.GetValue()
         self.temp_config["translate_enabled"] = self.trans_enabled.GetValue()

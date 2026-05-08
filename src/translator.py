@@ -12,11 +12,20 @@ logger = logging.getLogger("TranslatorDebug")
 logger.setLevel(logging.INFO)
 # Ya no creamos translation_debug.log
 
+def get_base_path():
+    if getattr(sys, 'frozen', False):
+        return os.path.dirname(sys.executable)
+    return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
 def get_resource_path(relative_path):
     if getattr(sys, 'frozen', False):
         # Aseguramos _MEIPASS en mayúsculas
         return os.path.join(sys._MEIPASS, relative_path)
     return os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), relative_path)
+
+argos_dir = get_resource_path(os.path.join("models", "argos"))
+os.makedirs(argos_dir, exist_ok=True)
+os.environ["ARGOS_PACKAGES_DIR"] = argos_dir
 
 if getattr(sys, 'frozen', False):
     try:

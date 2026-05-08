@@ -1,67 +1,93 @@
 # -*- mode: python ; coding: utf-8 -*-
+# =============================================================================
+# PaddleOCR Scanner — .spec basado en el original pre-traducción que FUNCIONABA
+# con OpenVINO, más las dependencias de Argos Translate.
+# =============================================================================
 import os
 import sys
 from PyInstaller.utils.hooks import collect_data_files, collect_dynamic_libs
 
-# 1. Definir archivos de datos (LIMPIO: sin config.json ni manual.html)
+# 1. Datos
 datas = [
     ('models', 'models'),
     ('src/assets', 'src/assets')
 ]
 
-# Recolectar datos de las librerías necesarias
+# --- Exactamente como el .spec viejo que funcionaba ---
 datas += collect_data_files('rapidocr_openvino')
 datas += collect_data_files('openvino')
 
-# 2. Recolectar BINARIOS (DLLs) de OpenVINO
+# --- Nuevo: datos de Argos y sus dependencias ---
+datas += collect_data_files('argostranslate')
+datas += collect_data_files('stanza')
+datas += collect_data_files('sentencepiece')
+datas += collect_data_files('certifi')
+
+# 2. Binarios — Exactamente como el viejo .spec
 binaries = collect_dynamic_libs('openvino')
+
+# --- Nuevo: binarios de CTranslate2 (motor de Argos) ---
+# IMPORTANTE: NO usar collect_dynamic_libs aquí porque pone las DLLs en la raíz
+# y ctranslate2 las necesita en su propia carpeta para que __init__.py las encuentre.
+import glob
+VENV_SP = os.path.join('.venv', 'Lib', 'site-packages')
+ct2_src = os.path.join(VENV_SP, 'ctranslate2')
+for f in glob.glob(os.path.join(ct2_src, '*.dll')) + glob.glob(os.path.join(ct2_src, '*.pyd')):
+    binaries.append((f, 'ctranslate2'))
+# SentencePiece binding
+sp_pyd = os.path.join(VENV_SP, 'sentencepiece', '_sentencepiece.cp312-win_amd64.pyd')
+if os.path.exists(sp_pyd):
+    binaries.append((sp_pyd, 'sentencepiece'))
 
 a = Analysis(
     ['src/main.py'],
-    pathex=[],
+    pathex=['src'],
     binaries=binaries,
     datas=datas,
     hiddenimports=[
-        'PIL.Image', 
-        'rapidocr_openvino', 
+        # --- Del .spec viejo que funcionaba ---
+        'PIL.Image',
+        'rapidocr_openvino',
         'openvino.runtime',
         'openvino.frontend',
         'openvino.preprocess',
         'win32gui',
         'win32process',
-        'win32api'
+        'win32api',
+        # --- Nuevo: para Argos Translate ---
+        'argostranslate',
+        'argostranslate.translate',
+        'argostranslate.package',
+        'argostranslate.settings',
+        'argostranslate.sbd',
+        'ctranslate2',
+        'ctranslate2._ext',
+        'sentencepiece',
+        'stanza',
+        'torch',
+        'certifi',
+        'charset_normalizer',
+        # --- Para accesibilidad ---
+        'accessible_output2',
+        'accessible_output2.outputs.sapi5',
+        'accessible_output2.outputs.nvda',
+        'psutil',
+        'cv2',
     ],
     hookspath=[],
     hooksconfig={},
-    runtime_hooks=[],
+    # Runtime hook SOLO para CTranslate2 (OpenVINO no lo necesitaba antes)
+    runtime_hooks=['runtime_hook_openvino.py'],
     excludes=[
-        'keyboard', 'pynput', 'paddle', 'paddleocr', 'paddlex', 'paddle2onnx',
         'scipy', 'matplotlib', 'pandas', 'tkinter',
-        'PyQt5', 'PySide2', 'PySide6', 'notebook', 'ipython',
-        'setuptools', 'distutils', 'docutils',
-        'PIL.ImageQt', 'PIL.ImageTk', 'jedi', 'sqlite3',
-        'huggingface_hub', 'requests', 'urllib3', 'cryptography',
-        'pyasn1', 'pyasn1_modules', 'rsa', 'cachetools'
+        'notebook', 'ipython',
+        'PyQt5', 'PySide2', 'PySide6',
     ],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
     cipher=None,
     noarchive=False,
 )
-
-# FILTRO AGRESIVO DE BINARIOS
-# Eliminamos todo lo que no sea esencial para ahorrar espacio
-excluded_bin_patterns = [
-    'ffmpeg', 'videoio', 'highgui', 'opencv_ml', 'opencv_objdetect', 'opencv_photo',
-    'tensorflow', 'pytorch', 'caffe', 'paddle', 'opencl',
-    'openvino_tensorflow_frontend', 'openvino_pytorch_frontend',
-    'openvino_caffe_frontend', 'openvino_paddle_frontend'
-]
-
-a.binaries = [
-    b for b in a.binaries 
-    if not any(p in b[0].lower() for p in excluded_bin_patterns)
-]
 
 pyz = PYZ(a.pure, a.zipped_data, cipher=None)
 
@@ -74,7 +100,7 @@ exe = EXE(
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=True,
+    upx=False,   # El viejo usaba True pero con torch es riesgoso
     console=False,
     disable_windowed_traceback=False,
     argv_emulation=False,
@@ -89,7 +115,7 @@ coll = COLLECT(
     a.zipfiles,
     a.datas,
     strip=False,
-    upx=True,
+    upx=False,
     upx_exclude=[],
     name='PaddleOCR Scanner',
 )
