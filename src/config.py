@@ -30,6 +30,7 @@ DEFAULT_CONFIG = {
         "crop_left": 0,
         "crop_right": 0,
         "dynamic_sensitivity": 50,
+        "dynamic_diff_mode": False,
         "key_next": "down",
         "key_prev": "up",
         "key_click": "enter",

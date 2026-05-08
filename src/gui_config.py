@@ -184,7 +184,10 @@ class ConfigWindow(wx.Dialog):
         sizer.Add(self.dyn_target, 0, wx.EXPAND | wx.ALL, 10)
         self.dyn_interval = self._add_spin(self.tab_dynamic, grid, "Intervalo de escaneo (décimas):", 1, 100, name="Intervalo")
         self.dyn_sens = self._add_spin(self.tab_dynamic, grid, "Sensibilidad al cambio (1-100):", 1, 100, name="Sensibilidad")
-        sizer.Add(grid, 1, wx.EXPAND | wx.ALL, 20); self.tab_dynamic.SetSizer(sizer)
+        sizer.Add(grid, 1, wx.EXPAND | wx.ALL, 20)
+        self.dyn_diff = wx.CheckBox(self.tab_dynamic, label="Modo Diferencial: solo leer texto nuevo (ideal para chats y subtítulos)")
+        sizer.Add(self.dyn_diff, 0, wx.ALL, 15)
+        self.tab_dynamic.SetSizer(sizer)
 
     def _setup_trans_tab(self):
         sizer = wx.BoxSizer(wx.VERTICAL); grid = wx.FlexGridSizer(cols=2, vgap=20, hgap=10); grid.AddGrowableCol(1)
@@ -294,6 +297,7 @@ class ConfigWindow(wx.Dialog):
         self.shadow_burst.SetValue(int(c.get("shadow_burst_count", 4)))
         self.dyn_target.SetSelection(0 if c.get("dynamic_target", "screen") == "screen" else 1)
         self.dyn_interval.SetValue(int(c.get("dynamic_interval", 1.0) * 10)); self.dyn_sens.SetValue(int(c.get("dynamic_sensitivity", 50)))
+        self.dyn_diff.SetValue(c.get("dynamic_diff_mode", False))
         self.trans_enabled.SetValue(c.get("translate_enabled", False))
         f_code = c.get("translate_from", "en"); t_code = c.get("translate_to", "es")
         if f_code in self.trans_codes: self.trans_from.SetSelection(self.trans_codes.index(f_code))
@@ -312,6 +316,7 @@ class ConfigWindow(wx.Dialog):
         self.temp_config["shadow_burst_count"] = self.shadow_burst.GetValue()
         self.temp_config["dynamic_target"] = "screen" if self.dyn_target.GetSelection() == 0 else "window"
         self.temp_config["dynamic_interval"] = self.dyn_interval.GetValue() / 10.0; self.temp_config["dynamic_sensitivity"] = self.dyn_sens.GetValue()
+        self.temp_config["dynamic_diff_mode"] = self.dyn_diff.GetValue()
         self.temp_config["translate_enabled"] = self.trans_enabled.GetValue()
         self.temp_config["translate_from"] = self.trans_codes[self.trans_from.GetSelection()]
         self.temp_config["translate_to"] = self.trans_codes[self.trans_to.GetSelection()]

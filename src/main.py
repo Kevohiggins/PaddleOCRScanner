@@ -188,30 +188,68 @@ class PaddleOCRScanner:
 
     def _dynamic_scan_loop(self):
         prev_text = ""
+        prev_elements_texts = set()
+        prev_img_hash = None
         while self.is_dynamic_running:
+            loop_start = time.time()
             try:
                 self._update_profile()
                 img, ox, oy = capture_active_window() if self.config.get("dynamic_target") == "window" else capture_screen()
                 img, ox, oy = self._apply_crops(img, ox, oy)
+
+                # Atajo rápido: si la imagen no cambió, no gastar CPU en OCR
+                import hashlib
+                img_hash = hashlib.md5(img.tobytes()).digest()
+                if img_hash == prev_img_hash:
+                    # El usuario sugirió poner el sleep aquí. Esperamos el intervalo configurado.
+                    elapsed = time.time() - loop_start
+                    remaining = max(0.1, float(self.config.get("dynamic_interval", 1.0)) - elapsed)
+                    time.sleep(remaining)
+                    continue
+                prev_img_hash = img_hash
+
                 with self._scan_lock: elements = self.ocr.scan_image(img)
                 self._last_elements = elements
                 elements = self.shadow.filter_elements(elements)
-                full_text = " ".join([e.text for e in elements]).strip()
-                
+
                 sens = float(self.config.get("dynamic_sensitivity", 50)) / 100.0
-                threshold = 1.0 - (sens * 0.5)
-                
-                if full_text and SequenceMatcher(None, prev_text, full_text).ratio() < threshold:
-                    prev_text = full_text
-                    
-                    if self.config.get("translate_enabled"):
-                        from_code = self.config.get("translate_from", "en")
-                        to_code = self.config.get("translate_to", "es")
-                        full_text = translator_instance.translate(full_text, from_code, to_code)
-                        
-                    self.tts.speak(full_text, interrupt=True)
+                threshold = sens # Rango directo de 0.01 a 1.0
+
+                if self.config.get("dynamic_diff_mode", False):
+                    # Modo Diferencial: solo leer lo nuevo
+                    current_texts = [e.text.strip() for e in elements if e.text.strip()]
+                    new_texts = []
+                    for txt in current_texts:
+                        is_old = False
+                        for prev in prev_elements_texts:
+                            if SequenceMatcher(None, txt.lower(), prev.lower()).ratio() >= threshold:
+                                is_old = True; break
+                        if not is_old:
+                            new_texts.append(txt)
+                    prev_elements_texts = set(current_texts)
+                    if new_texts:
+                        new_text = " ".join(new_texts)
+                        if self.config.get("translate_enabled"):
+                            from_code = self.config.get("translate_from", "en")
+                            to_code = self.config.get("translate_to", "es")
+                            new_text = translator_instance.translate(new_text, from_code, to_code)
+                        self.tts.speak(new_text, interrupt=False)
+                else:
+                    # Modo clásico: leer todo si cambió
+                    full_text = " ".join([e.text for e in elements]).strip()
+                    if full_text and SequenceMatcher(None, prev_text, full_text).ratio() < threshold:
+                        prev_text = full_text
+                        if self.config.get("translate_enabled"):
+                            from_code = self.config.get("translate_from", "en")
+                            to_code = self.config.get("translate_to", "es")
+                            full_text = translator_instance.translate(full_text, from_code, to_code)
+                        self.tts.speak(full_text, interrupt=False)
             except Exception as e: logger.error(f"Error dinámico: {e}")
-            time.sleep(float(self.config.get("dynamic_interval", 1.0)))
+            
+            # Sleep compensado: descuenta el tiempo que tardó el procesamiento
+            elapsed = time.time() - loop_start
+            remaining = max(0, float(self.config.get("dynamic_interval", 1.0)) - elapsed)
+            time.sleep(remaining)
 
     def _start_scan(self, mode):
         if self._scan_lock.locked(): return
@@ -262,6 +300,7 @@ class PaddleOCRScanner:
         self._refresh_hotkeys()
 
     def _on_quit_hotkey(self):
+        self._release_modifiers()
         if self.app: wx.CallAfter(self.app.ExitMainLoop)
 
     def restart_app(self):
