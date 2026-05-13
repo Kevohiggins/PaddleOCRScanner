@@ -15,7 +15,7 @@ DEFAULT_CONFIG = {
     "global": {
         "ocr_language": "latin",
         "min_confidence": 0.3,
-        "use_gpu": True,
+        "openvino_device": "AUTO",
         "image_scale": 0.5,
         "hotkey_screen": "ctrl+alt+s",
         "hotkey_window": "ctrl+alt+w",
@@ -35,7 +35,7 @@ DEFAULT_CONFIG = {
         "key_prev": "up",
         "key_click": "enter",
         "key_double": "shift+enter",
-        "key_right": "menu",
+        "key_right": "apps",
         "key_exit": "esc",
         "translate_enabled": False,
         "translate_to": "es",
@@ -49,7 +49,11 @@ DEFAULT_CONFIG = {
         "key_last": "end",
         "key_skip_next": "right",
         "key_skip_prev": "left",
-        "key_repeat": "space"
+        "key_repeat": "space",
+        "hotkey_manual": "ctrl+alt+f1",
+        "auto_rescan_after_click": False,
+        "auto_rescan_delay": 5,
+        "hotkey_toggle_auto_rescan": "ctrl+alt+a"
     },
     "profiles": {},
     "shadow_profiles": {} # Mantenemos esto por compatibilidad o lo migramos luego

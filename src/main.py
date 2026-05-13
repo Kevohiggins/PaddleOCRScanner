@@ -15,7 +15,7 @@ import win32api
 import win32process
 from difflib import SequenceMatcher
 
-from config import load_config, save_config, CONFIG_FILE, get_effective_config
+from config import load_config, save_config, CONFIG_FILE, get_effective_config, get_base_path
 from tts_engine import TTSEngine
 from ocr_engine import OCREngine
 from screen_capture import capture_screen, capture_active_window
@@ -48,6 +48,44 @@ def parse_hotkey(hotkey_str):
             if res != -1: vk = res & 0xFF
     return mods, vk
 
+import wx.adv
+
+class TrayIcon(wx.adv.TaskBarIcon):
+    def __init__(self, scanner):
+        super().__init__()
+        self.scanner = scanner
+        
+        # Usamos un icono estándar de información si no hay uno específico
+        icon = wx.ArtProvider.GetIcon(wx.ART_INFORMATION, wx.ART_OTHER, (16, 16))
+        self.SetIcon(icon, "PaddleOCRScanner")
+        
+        self.Bind(wx.adv.EVT_TASKBAR_RIGHT_DOWN, self.on_click)
+        self.Bind(wx.adv.EVT_TASKBAR_LEFT_DOWN, self.on_click)
+
+    def CreatePopupMenu(self):
+        menu = wx.Menu()
+        help_item = menu.Append(wx.ID_ANY, "Ayuda")
+        config_item = menu.Append(wx.ID_ANY, "Configuración")
+        exit_item = menu.Append(wx.ID_ANY, "Salir")
+        
+        self.Bind(wx.EVT_MENU, self.on_help, help_item)
+        self.Bind(wx.EVT_MENU, self.on_config, config_item)
+        self.Bind(wx.EVT_MENU, self.on_exit, exit_item)
+        
+        return menu
+
+    def on_click(self, event):
+        self.PopupMenu(self.CreatePopupMenu())
+
+    def on_help(self, event):
+        self.scanner._on_open_manual()
+
+    def on_config(self, event):
+        self.scanner._on_open_config()
+
+    def on_exit(self, event):
+        self.scanner._on_quit_hotkey()
+
 class HotkeyFrame(wx.Frame):
     def __init__(self, callback_map):
         super().__init__(None, style=wx.NO_BORDER)
@@ -77,6 +115,7 @@ class PaddleOCRScanner:
         self.is_dynamic_running = False
         self.shadow = ShadowManager(CONFIG_FILE)
         self.app = wx.App(False)
+        self.tray = TrayIcon(self)
         self.hotkey_frame = None
         self._last_profile = "Global"
         self._last_elements = []
@@ -88,17 +127,23 @@ class PaddleOCRScanner:
             self.ocr.initialize()
             translator_instance.set_on_ready_callback(lambda: self.tts.speak("Motor de traducción listo.") if self.config.get("translate_enabled") else None)
             
-            if self.config.get("translate_enabled"):
+            if self.config.get("translate_type", "local") == "local" and self.config.get("translate_enabled"):
                 self.tts.speak("Iniciando motor de traducción.")
                 translator_instance.ensure_initialized()
         except Exception as e:
             logger.error(f"Error inicializando OCR: {e}")
             self.tts.speak("Error al cargar el motor de lectura.")
         
-        hk_map = { 101: self._on_scan_screen, 102: self._on_scan_window, 103: self._on_open_config, 104: self._on_quit_hotkey, 105: self._toggle_dynamic_scan, 106: self._on_learn_shadow, 107: self._on_clear_shadow, 108: self._on_toggle_shadow }
+        hk_map = { 
+            101: self._on_scan_screen, 102: self._on_scan_window, 103: self._on_open_config, 
+            104: self._on_quit_hotkey, 105: self._toggle_dynamic_scan, 106: self._on_learn_shadow, 
+            107: self._on_clear_shadow, 108: self._on_toggle_shadow, 109: self._on_open_manual,
+            110: self._on_toggle_auto_rescan
+        }
         self.hotkey_frame = HotkeyFrame(hk_map); self._refresh_hotkeys()
         self.tts.speak("Scanner listo.")
         self.app.MainLoop()
+        if hasattr(self, 'tray'): self.tray.Destroy()
         self.tts.speak("Cerrando programa.")
         self.tts.play_shutdown(); time.sleep(1.0); sys.exit(0)
 
@@ -135,6 +180,26 @@ class PaddleOCRScanner:
         self.hotkey_frame.register(106, c.get("hotkey_shadow_learn", "ctrl+alt+l"))
         self.hotkey_frame.register(107, c.get("hotkey_shadow_clear", "ctrl+alt+r"))
         self.hotkey_frame.register(108, c.get("hotkey_shadow_toggle", "ctrl+alt+u"))
+        self.hotkey_frame.register(109, c.get("hotkey_manual", "ctrl+alt+f1"))
+        self.hotkey_frame.register(110, c.get("hotkey_toggle_auto_rescan", "ctrl+alt+a"))
+
+    def _on_open_manual(self):
+        self._release_modifiers()
+        import webbrowser
+        manual_path = os.path.join(get_base_path(), "manual.html")
+        if os.path.exists(manual_path):
+            webbrowser.open(f"file:///{manual_path}")
+            self.tts.speak("Abriendo manual.")
+        else:
+            self.tts.speak("No se encontró el manual.")
+
+    def _on_toggle_auto_rescan(self):
+        self._release_modifiers()
+        current = self.config.get("auto_rescan_after_click", False)
+        self.config["auto_rescan_after_click"] = not current
+        self.full_config["global"]["auto_rescan_after_click"] = not current
+        state = "activado" if not current else "desactivado"
+        self.tts.speak(f"Reescaneo automático {state}.")
 
     def _release_modifiers(self):
         for vk in [0x11, 0x12, 0x10, 0x5B, 0x5C]: ctypes.windll.user32.keybd_event(vk, 0, 0x0002, 0)
@@ -212,12 +277,21 @@ class PaddleOCRScanner:
                 self._last_elements = elements
                 elements = self.shadow.filter_elements(elements)
 
-                sens = float(self.config.get("dynamic_sensitivity", 50)) / 100.0
-                threshold = sens # Rango directo de 0.01 a 1.0
+                sens_val = int(self.config.get("dynamic_sensitivity", 50))
+                if sens_val >= 100: # Alta
+                    min_len = 1; threshold = 0.9
+                elif sens_val >= 80: # Media Alta
+                    min_len = 1; threshold = 0.7
+                elif sens_val >= 60: # Normal
+                    min_len = 2; threshold = 0.5
+                elif sens_val >= 40: # Media Baja
+                    min_len = 3; threshold = 0.3
+                else: # Baja
+                    min_len = 4; threshold = 0.1
 
                 if self.config.get("dynamic_diff_mode", False):
                     # Modo Diferencial: solo leer lo nuevo
-                    current_texts = [e.text.strip() for e in elements if e.text.strip()]
+                    current_texts = [e.text.strip() for e in elements if len(e.text.strip()) >= min_len]
                     new_texts = []
                     for txt in current_texts:
                         is_old = False
@@ -232,18 +306,29 @@ class PaddleOCRScanner:
                         if self.config.get("translate_enabled"):
                             from_code = self.config.get("translate_from", "en")
                             to_code = self.config.get("translate_to", "es")
-                            new_text = translator_instance.translate(new_text, from_code, to_code)
-                        self.tts.speak(new_text, interrupt=False)
+                            new_text = translator_instance.translate(
+                                new_text, from_code, to_code, 
+                                translate_type=self.config.get("translate_type", "local"),
+                                service=self.config.get("translate_service", "google"),
+                                swap=self.config.get("translate_swap", False)
+                            )
+                        self.tts.speak(new_text, interrupt=self.config.get("dynamic_interrupt", False))
                 else:
                     # Modo clásico: leer todo si cambió
-                    full_text = " ".join([e.text for e in elements]).strip()
+                    filtered_elements = [e for e in elements if len(e.text.strip()) >= min_len]
+                    full_text = " ".join([e.text for e in filtered_elements]).strip()
                     if full_text and SequenceMatcher(None, prev_text, full_text).ratio() < threshold:
                         prev_text = full_text
                         if self.config.get("translate_enabled"):
                             from_code = self.config.get("translate_from", "en")
                             to_code = self.config.get("translate_to", "es")
-                            full_text = translator_instance.translate(full_text, from_code, to_code)
-                        self.tts.speak(full_text, interrupt=False)
+                            full_text = translator_instance.translate(
+                                full_text, from_code, to_code, 
+                                translate_type=self.config.get("translate_type", "local"),
+                                service=self.config.get("translate_service", "google"),
+                                swap=self.config.get("translate_swap", False)
+                            )
+                        self.tts.speak(full_text, interrupt=self.config.get("dynamic_interrupt", False))
             except Exception as e: logger.error(f"Error dinámico: {e}")
             
             # Sleep compensado: descuenta el tiempo que tardó el procesamiento
@@ -274,7 +359,8 @@ class PaddleOCRScanner:
         if elements:
             self.tts.play_scan_success()
             self.tts.speak(f"{len(elements)} resultados.", interrupt=True)
-            nav = ElementNavigator(self.tts, self.config, ox, oy); nav.navigate(elements)
+            nav = ElementNavigator(self.tts, self.config, ox, oy, rescan_callback=lambda: self._start_scan(mode))
+            nav.navigate(elements)
         else: 
             self.tts.play_error(); self.tts.speak("No se detectó nada.", interrupt=True)
 

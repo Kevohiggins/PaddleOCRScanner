@@ -41,8 +41,10 @@ class OCREngine:
         """
         from rapidocr_openvino import RapidOCR
 
-        use_gpu = self.config.get("use_gpu", False)
-        device = "GPU" if use_gpu else "CPU"
+        device = self.config.get("openvino_device", "AUTO")
+        # Fallback para configuraciones viejas
+        if "openvino_device" not in self.config and "use_gpu" in self.config:
+            device = "GPU" if self.config["use_gpu"] else "CPU"
         
         # Obtener idioma configurado (default: latin)
         lang = self.config.get("ocr_language", "latin")
@@ -168,12 +170,66 @@ class OCREngine:
         else:
             process_image = image
 
+        original_was_bgr = len(process_image.shape) == 3 and process_image.shape[2] == 3
+
+        # 1. Enfoque (Sharpening)
+        if self.config.get("use_sharpening", False):
+            print("DEBUG: Aplicando Enfoque de bordes...")
+            kernel = np.array([[-1,-1,-1], [-1,9,-1], [-1,-1,-1]])
+            process_image = cv2.filter2D(process_image, -1, kernel)
+            print("DEBUG: Enfoque aplicado con éxito.")
+
+        # 2. Contraste (CLAHE)
+        if self.config.get("use_clahe", False):
+            print("DEBUG: Aplicando CLAHE...")
+            if original_was_bgr:
+                gray = cv2.cvtColor(process_image, cv2.COLOR_BGR2GRAY)
+            else:
+                gray = process_image
+            clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
+            cl = clahe.apply(gray)
+            if original_was_bgr:
+                process_image = cv2.cvtColor(cl, cv2.COLOR_GRAY2BGR)
+            else:
+                process_image = cl
+            print("DEBUG: CLAHE aplicado con éxito.")
+
+        # 3. Binarización (Blanco y Negro)
+        if self.config.get("use_binarization", False):
+            print("DEBUG: Aplicando Binarización...")
+            if original_was_bgr:
+                gray = cv2.cvtColor(process_image, cv2.COLOR_BGR2GRAY)
+            else:
+                gray = process_image
+            # Usamos Binarización Adaptativa (Gaussian) para que se banque sombras desparejas
+            cl = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2)
+            if original_was_bgr:
+                process_image = cv2.cvtColor(cl, cv2.COLOR_GRAY2BGR)
+            else:
+                process_image = cl
+            print("DEBUG: Binarización aplicada con éxito.")
+
+        # 4. Dilatación (Engrosar letras)
+        if self.config.get("use_dilation", False):
+            print("DEBUG: Aplicando Dilatación...")
+            if original_was_bgr:
+                gray = cv2.cvtColor(process_image, cv2.COLOR_BGR2GRAY)
+            else:
+                gray = process_image
+            kernel = np.ones((2,2), np.uint8)
+            cl = cv2.dilate(gray, kernel, iterations=1)
+            if original_was_bgr:
+                process_image = cv2.cvtColor(cl, cv2.COLOR_GRAY2BGR)
+            else:
+                process_image = cl
+            print("DEBUG: Dilatación aplicada con éxito.")
+
         result, elapse = self._ocr(process_image)
         
         if elapse:
             logger.info("Tiempos OCR (OpenVINO): Det=%.3fs, Rec=%.3fs, Total=%.3fs", 
                         elapse[0] if len(elapse) > 0 else 0,
-                        elapse[1] if len(elapse) > 1 else 0,
+                        elapse[-1] if len(elapse) > 1 else 0,
                         sum(elapse))
 
         if not result:

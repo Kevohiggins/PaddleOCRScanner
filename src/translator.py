@@ -129,17 +129,42 @@ class Translator:
             return lang_from.get_translation(lang_to) is not None
         except: return False
 
-    def translate(self, text, from_code, to_code):
-        if not self._argos_installed or not text or not self._initialized: return text
+    def translate(self, text, from_code, to_code, translate_type="local", service="google", swap=False):
+        if not text: return text
+        
+        if translate_type == "online":
+            try:
+                import translators as ts
+                print(f"DEBUG: Enviando a {service} [{from_code}->{to_code}]: {text}")
+                
+                if swap:
+                    # Intercambio Inteligente: probamos traducir al destino
+                    result = ts.translate_text(text, translator=service, from_language='auto', to_language=to_code)
+                    if result.strip().lower() == text.strip().lower():
+                        # Si devuelve lo mismo, asumimos que ya estaba en el idioma destino!
+                        # Traducimos al origen!
+                        print(f"DEBUG: Texto ya estaba en destino. Invirtiendo traducción a {from_code}...")
+                        result = ts.translate_text(text, translator=service, from_language='auto', to_language=from_code)
+                else:
+                    result = ts.translate_text(text, translator=service, from_language='auto', to_language=to_code)
+                    
+                print(f"DEBUG: Resultado {service}: {result}")
+                return result
+            except Exception as e:
+                print(f"Error en traducción Online ({service}): {e}")
+                return text
+                
+        # Modo Local (Argos)
+        if not self._argos_installed or not self._initialized: return text
         with self._lock:
             try:
                 import argostranslate.translate
-                logger.info(f"Traduciendo [{from_code}->{to_code}]: {text[:50]}...")
+                logger.info(f"Traduciendo Local [{from_code}->{to_code}]: {text[:50]}...")
                 result = argostranslate.translate.translate(text, from_code, to_code)
-                logger.info(f"Resultado: {result[:50]}...")
+                logger.info(f"Resultado Local: {result[:50]}...")
                 return result
             except Exception as e:
-                logger.error(f"Error en traducción:\n{traceback.format_exc()}")
+                logger.error(f"Error en traducción Local:\n{traceback.format_exc()}")
                 return text
 
     def download_model(self, from_code, to_code, progress_callback=None):

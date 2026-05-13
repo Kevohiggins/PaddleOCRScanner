@@ -9,10 +9,10 @@ logger = logging.getLogger(__name__)
 
 class HotkeyCaptureDialog(wx.Dialog):
     def __init__(self, parent, config, key_id):
-        super().__init__(parent, title="Capturar Atajo", size=(300, 150))
+        super().__init__(parent, title="Capturar Atajo", size=(350, 180))
         self.config = config; self.key_id = key_id; self.final_hotkey = ""
         panel = wx.Panel(self); sizer = wx.BoxSizer(wx.VERTICAL)
-        self.label = wx.StaticText(panel, label="Presione la combinación de teclas...", style=wx.ALIGN_CENTER)
+        self.label = wx.StaticText(panel, label="Presioná el atajo de teclas deseado.\nUsá R para restaurar al atajo por defecto, o Suprimir para borrarlo.", style=wx.ALIGN_CENTER)
         sizer.Add(self.label, 1, wx.EXPAND | wx.ALL, 20)
         panel.SetSizer(sizer)
         self.Bind(wx.EVT_CHAR_HOOK, self.on_key_down)
@@ -22,6 +22,18 @@ class HotkeyCaptureDialog(wx.Dialog):
         if event.ControlDown(): mods.append("ctrl")
         if event.AltDown(): mods.append("alt")
         if event.ShiftDown(): mods.append("shift")
+        
+        # R para resetear al valor por defecto (sin modificadores)
+        if vk == ord('R') and not mods:
+            self.final_hotkey = DEFAULT_CONFIG["global"].get(self.key_id, "")
+            self.EndModal(wx.ID_OK)
+            return
+            
+        # Suprimir para desasignar (sin modificadores)
+        if vk == wx.WXK_DELETE and not mods:
+            self.final_hotkey = "Sin asignar"
+            self.EndModal(wx.ID_OK)
+            return
         
         key = ""
         if 32 <= vk <= 126: key = chr(vk).lower()
@@ -59,7 +71,8 @@ class ConfigWindow(wx.Dialog):
         "key_right": "Click Derecho", "key_exit": "Salir de Navegación",
         "key_copy": "Copiar Resultado", "key_first": "Primer Resultado",
         "key_last": "Último Resultado", "key_skip_next": "Avanzar 5 Resultados",
-        "key_skip_prev": "Retroceder 5 Resultados", "key_repeat": "Repetir/Deletrear"
+        "key_skip_prev": "Retroceder 5 Resultados", "key_repeat": "Repetir/Deletrear",
+        "hotkey_manual": "Abrir Manual", "hotkey_toggle_auto_rescan": "Alternar Reescaneo"
     }
 
     def __init__(self, parent, full_config, current_profile="Global", restart_callback=None):
@@ -100,13 +113,27 @@ class ConfigWindow(wx.Dialog):
         self.tab_general = wx.Panel(self.tabs); self.tab_keys = wx.ScrolledWindow(self.tabs, style=wx.VSCROLL)
         self.tab_ocr = wx.ScrolledWindow(self.tabs, style=wx.VSCROLL); self.tab_dynamic = wx.Panel(self.tabs)
         self.tab_trans = wx.Panel(self.tabs)
+        self.tab_improvements = wx.Panel(self.tabs)
+        self.tab_crops = wx.Panel(self.tabs) # Nueva pestaña para recortes
+        
         self.tab_keys.SetScrollRate(0, 20); self.tab_ocr.SetScrollRate(0, 20)
-        self.tabs.AddPage(self.tab_general, "General"); self.tabs.AddPage(self.tab_keys, "Atajos de Teclado")
-        self.tabs.AddPage(self.tab_ocr, "Precisión y Recortes"); self.tabs.AddPage(self.tab_dynamic, "Escaneo Dinámico")
+        
+        self.tabs.AddPage(self.tab_general, "General")
+        self.tabs.AddPage(self.tab_keys, "Atajos de Teclado")
+        self.tabs.AddPage(self.tab_ocr, "Precisión")
+        self.tabs.AddPage(self.tab_improvements, "Mejoras para OCR")
+        self.tabs.AddPage(self.tab_crops, "Recortes")
+        self.tabs.AddPage(self.tab_dynamic, "Escaneo Dinámico")
         self.tabs.AddPage(self.tab_trans, "Traducción")
         
-        self._setup_general_tab(); self._setup_keys_tab(); self._setup_ocr_tab(); self._setup_dynamic_tab()
+        self._setup_general_tab()
+        self._setup_keys_tab()
+        self._setup_ocr_tab()
+        self._setup_improvements_tab()
+        self._setup_crops_tab() # Nuevo
+        self._setup_dynamic_tab()
         self._setup_trans_tab()
+        
         main_sizer.Add(self.tabs, 1, wx.EXPAND | wx.ALL, 10)
         self.tabs.Bind(wx.EVT_NOTEBOOK_PAGE_CHANGED, self.on_tab_changed)
         
@@ -139,9 +166,9 @@ class ConfigWindow(wx.Dialog):
         langs = ["Latino", "Chino/Japonés", "Coreano", "Cirílico", "Tailandés", "Árabe", "Hindi"]
         self.lang_choice = wx.Choice(self.tab_general, choices=langs, name="Idioma OCR")
         grid.Add(self.lang_choice, 1, wx.EXPAND)
-        grid.Add(wx.StaticText(self.tab_general, label="Rendimiento:"), 0, wx.ALIGN_CENTER_VERTICAL)
-        self.use_gpu = wx.CheckBox(self.tab_general, label="Usar Aceleración GPU (OpenVINO)")
-        grid.Add(self.use_gpu, 1, wx.EXPAND)
+        grid.Add(wx.StaticText(self.tab_general, label="Dispositivo OpenVINO:"), 0, wx.ALIGN_CENTER_VERTICAL)
+        self.device_choice = wx.Choice(self.tab_general, choices=["Solo CPU", "Solo GPU (Integrada)", "Automático (AUTO)"], name="Dispositivo OpenVINO")
+        grid.Add(self.device_choice, 1, wx.EXPAND)
         sizer.Add(grid, 1, wx.EXPAND | wx.ALL, 20); self.tab_general.SetSizer(sizer)
 
     def _add_spin(self, parent, sizer, label, min_v, max_v, name=""):
@@ -153,8 +180,9 @@ class ConfigWindow(wx.Dialog):
         self.key_sizer = wx.BoxSizer(wx.VERTICAL)
         ids = ["hotkey_screen", "hotkey_window", "hotkey_config", "hotkey_quit", "hotkey_dynamic", 
                "hotkey_shadow_learn", "hotkey_shadow_clear", "hotkey_shadow_toggle",
-               "key_first", "key_prev", "key_next", "key_last", "key_copy", "key_repeat",
-               "key_skip_prev", "key_skip_next", "key_click", "key_double", "key_right", "key_exit"]
+               "key_first", "key_skip_prev", "key_prev", "key_next", "key_skip_next", "key_last", 
+               "key_copy", "key_repeat", "key_click", "key_double", "key_right", "key_exit",
+               "hotkey_manual", "hotkey_toggle_auto_rescan"]
         for kid in ids:
             btn = wx.Button(self.tab_keys, label=f"{self.PRO_NAMES[kid]}: ...", name=kid)
             btn.Bind(wx.EVT_BUTTON, self.on_capture)
@@ -172,29 +200,89 @@ class ConfigWindow(wx.Dialog):
             "Nativa: Normal (100%)", "Ultra: Recomendada para textos diminutos (200%)"
         ], name="Escala de imagen")
         grid.Add(self.scale_choice, 1, wx.EXPAND)
-        self.crop_t = self._add_spin(self.tab_ocr, grid, "Recorte Superior (%):", 0, 100)
-        self.crop_b = self._add_spin(self.tab_ocr, grid, "Recorte Inferior (%):", 0, 100)
-        self.crop_l = self._add_spin(self.tab_ocr, grid, "Recorte Izquierdo (%):", 0, 100)
-        self.crop_r = self._add_spin(self.tab_ocr, grid, "Recorte Derecho (%):", 0, 100)
-        sizer.Add(grid, 1, wx.EXPAND | wx.ALL, 20); self.tab_ocr.SetSizer(sizer)
+        
+        grid.Add(wx.StaticText(self.tab_ocr, label="Reescanear tras click:"), 0, wx.ALIGN_CENTER_VERTICAL)
+        self.auto_rescan = wx.CheckBox(self.tab_ocr, label="Activar reescaneo automático")
+        grid.Add(self.auto_rescan, 1, wx.EXPAND)
+        
+        self.auto_rescan_delay = self._add_spin(self.tab_ocr, grid, "Espera para reescaneo (décimas):", 1, 100)
+        
+        sizer.Add(grid, 1, wx.EXPAND | wx.ALL, 20)
+        self.tab_ocr.SetSizer(sizer)
+
+    def _setup_crops_tab(self):
+        sizer = wx.BoxSizer(wx.VERTICAL); grid = wx.FlexGridSizer(cols=2, vgap=15, hgap=10); grid.AddGrowableCol(1)
+        self.crop_t = self._add_spin(self.tab_crops, grid, "Recorte Superior (%):", 0, 100)
+        self.crop_b = self._add_spin(self.tab_crops, grid, "Recorte Inferior (%):", 0, 100)
+        self.crop_l = self._add_spin(self.tab_crops, grid, "Recorte Izquierdo (%):", 0, 100)
+        self.crop_r = self._add_spin(self.tab_crops, grid, "Recorte Derecho (%):", 0, 100)
+        
+        sizer.Add(grid, 1, wx.EXPAND | wx.ALL, 20)
+        self.tab_crops.SetSizer(sizer)
+
+    def _setup_improvements_tab(self):
+        sizer = wx.BoxSizer(wx.VERTICAL)
+        grid = wx.FlexGridSizer(cols=2, vgap=15, hgap=10)
+        grid.AddGrowableCol(1)
+        
+        grid.Add(wx.StaticText(self.tab_improvements, label="Enfoque de Bordes:"), 0, wx.ALIGN_CENTER_VERTICAL)
+        self.use_sharpening = wx.CheckBox(self.tab_improvements, label="Activar Enfoque (Mejora letras borrosas)")
+        grid.Add(self.use_sharpening, 1, wx.EXPAND)
+        
+        grid.Add(wx.StaticText(self.tab_improvements, label="Contraste Adaptativo:"), 0, wx.ALIGN_CENTER_VERTICAL)
+        self.use_clahe = wx.CheckBox(self.tab_improvements, label="Activar CLAHE (Útil para juegos oscuros)")
+        grid.Add(self.use_clahe, 1, wx.EXPAND)
+        
+        grid.Add(wx.StaticText(self.tab_improvements, label="Binarización:"), 0, wx.ALIGN_CENTER_VERTICAL)
+        self.use_binarization = wx.CheckBox(self.tab_improvements, label="Activar Blanco y Negro puro")
+        grid.Add(self.use_binarization, 1, wx.EXPAND)
+        
+        grid.Add(wx.StaticText(self.tab_improvements, label="Engrosar Letras:"), 0, wx.ALIGN_CENTER_VERTICAL)
+        self.use_dilation = wx.CheckBox(self.tab_improvements, label="Activar Dilatación (Para fuentes muy finas)")
+        grid.Add(self.use_dilation, 1, wx.EXPAND)
+        
+        sizer.Add(grid, 1, wx.EXPAND | wx.ALL, 20)
+        self.tab_improvements.SetSizer(sizer)
 
     def _setup_dynamic_tab(self):
         sizer = wx.BoxSizer(wx.VERTICAL); grid = wx.FlexGridSizer(cols=2, vgap=20, hgap=10); grid.AddGrowableCol(1)
         self.dyn_target = wx.RadioBox(self.tab_dynamic, label="Objetivo del escaneo", choices=["Pantalla Completa", "Ventana Activa"], name="Objetivo")
         sizer.Add(self.dyn_target, 0, wx.EXPAND | wx.ALL, 10)
         self.dyn_interval = self._add_spin(self.tab_dynamic, grid, "Intervalo de escaneo (décimas):", 1, 100, name="Intervalo")
-        self.dyn_sens = self._add_spin(self.tab_dynamic, grid, "Sensibilidad al cambio (1-100):", 1, 100, name="Sensibilidad")
+        grid.Add(wx.StaticText(self.tab_dynamic, label="Sensibilidad al cambio:"), 0, wx.ALIGN_CENTER_VERTICAL)
+        self.dyn_sens = wx.Choice(self.tab_dynamic, choices=[
+            "Baja", "Media Baja", "Normal", "Media Alta", "Alta"
+        ], name="Sensibilidad")
+        grid.Add(self.dyn_sens, 1, wx.EXPAND)
         sizer.Add(grid, 1, wx.EXPAND | wx.ALL, 20)
         self.dyn_diff = wx.CheckBox(self.tab_dynamic, label="Modo Diferencial: solo leer texto nuevo (ideal para chats y subtítulos)")
         sizer.Add(self.dyn_diff, 0, wx.ALL, 15)
+        self.dyn_interrupt = wx.CheckBox(self.tab_dynamic, label="Interrumpir lector de pantalla para leer resultados nuevos")
+        sizer.Add(self.dyn_interrupt, 0, wx.ALL, 15)
         self.tab_dynamic.SetSizer(sizer)
 
     def _setup_trans_tab(self):
         sizer = wx.BoxSizer(wx.VERTICAL); grid = wx.FlexGridSizer(cols=2, vgap=20, hgap=10); grid.AddGrowableCol(1)
         
-        self.trans_enabled = wx.CheckBox(self.tab_trans, label="Activar traducción automática (Local)")
-        self.trans_enabled.Bind(wx.EVT_CHECKBOX, self.update_trans_ui)
-        sizer.Add(self.trans_enabled, 0, wx.ALL, 15)
+        grid.Add(wx.StaticText(self.tab_trans, label="Tipo de traducción:"), 0, wx.ALIGN_CENTER_VERTICAL)
+        self.trans_type = wx.Choice(self.tab_trans, choices=[
+            "Desactivada", "Local (Argos)", "Online (Translators)"
+        ], name="Tipo de traducción")
+        self.trans_type.Bind(wx.EVT_CHOICE, self.update_trans_ui)
+        grid.Add(self.trans_type, 1, wx.EXPAND)
+        
+        # Nuevo: Servicio Online
+        self.lbl_service = wx.StaticText(self.tab_trans, label="Servicio Online:")
+        grid.Add(self.lbl_service, 0, wx.ALIGN_CENTER_VERTICAL)
+        self.trans_service = wx.Choice(self.tab_trans, choices=[
+            "google", "bing", "deepl", "yandex", "baidu", "alibaba", 
+            "apertium", "caiyun", "cloudTranslation", "elia", "hujiang", 
+            "iciba", "iflytek", "itranslate", "lingvanex", "myMemory", 
+            "niutrans", "papago", "qqFanyi", "reverso", "sogou", 
+            "sysTran", "translateCom", "translateMe", "volcEngine", 
+            "youdao"
+        ], name="Servicio Online")
+        grid.Add(self.trans_service, 1, wx.EXPAND)
         
         grid.Add(wx.StaticText(self.tab_trans, label="Traducir de (Origen):"), 0, wx.ALIGN_CENTER_VERTICAL)
         self.trans_from = wx.Choice(self.tab_trans, choices=self.trans_names, name="Traducir de")
@@ -206,7 +294,12 @@ class ConfigWindow(wx.Dialog):
         self.trans_to.Bind(wx.EVT_CHOICE, self.update_trans_ui)
         grid.Add(self.trans_to, 1, wx.EXPAND)
         
-        sizer.Add(grid, 1, wx.EXPAND | wx.ALL, 15)
+        sizer.Add(grid, 0, wx.EXPAND | wx.ALL, 15)
+        
+        # Nuevo: Intercambio Inteligente
+        self.trans_swap = wx.CheckBox(self.tab_trans, label="Intercambio Inteligente (Detectar idioma y traducir al opuesto)")
+        sizer.Add(self.trans_swap, 0, wx.ALL, 15)
+        
         self.trans_status = wx.StaticText(self.tab_trans, label="Estado: Listo")
         sizer.Add(self.trans_status, 0, wx.LEFT, 15)
         self.trans_prog = wx.Gauge(self.tab_trans, range=100); sizer.Add(self.trans_prog, 0, wx.EXPAND | wx.ALL, 15)
@@ -216,15 +309,60 @@ class ConfigWindow(wx.Dialog):
 
     def update_trans_ui(self, event=None):
         from translator import translator_instance
-        f = self.trans_codes[self.trans_from.GetSelection()]
-        t = self.trans_codes[self.trans_to.GetSelection()]
-        enabled = self.trans_enabled.GetValue()
-        self.trans_from.Enable(enabled); self.trans_to.Enable(enabled); self.btn_download.Enable(enabled)
         
-        if translator_instance.is_model_installed(f, t):
-            self.btn_download.SetLabel(f"Eliminar Modelo {f} -> {t}"); self.btn_download.SetForegroundColour(wx.RED); self.is_delete_mode = True
-        else:
-            self.btn_download.SetLabel(f"Descargar Modelo {f} -> {t}"); self.btn_download.SetForegroundColour(wx.NullColour); self.is_delete_mode = False
+        selection = self.trans_type.GetSelection()
+        enabled = (selection != 0)
+        is_local = (selection == 1)
+        is_online = (selection == 2)
+        
+        self.trans_from.Enable(enabled)
+        self.trans_to.Enable(enabled)
+        
+        # Ocultar/Mostrar controles específicos de Argos (Local)
+        self.btn_download.Show(is_local)
+        self.trans_status.Show(is_local)
+        self.trans_prog.Show(is_local)
+        
+        # Nuevo: Ocultar/Mostrar controles específicos de Online
+        self.lbl_service.Show(is_online)
+        self.trans_service.Show(is_online)
+        self.trans_swap.Show(is_online)
+        
+        # Guardar selección actual para intentar mantenerla
+        current_from_code = "en"
+        current_to_code = "es"
+        if hasattr(self, 'current_trans_codes') and self.trans_from.GetSelection() != wx.NOT_FOUND:
+            try:
+                current_from_code = self.current_trans_codes[self.trans_from.GetSelection()]
+                current_to_code = self.current_trans_codes[self.trans_to.GetSelection()]
+            except: pass
+            
+        # Usamos siempre la lista de idiomas de Argos (estática) para simplificar
+        # y remover la dependencia de deep_translator.
+        self.current_trans_names = self.trans_names
+        self.current_trans_codes = self.trans_codes
+        
+        self.trans_from.Clear()
+        self.trans_from.AppendItems(self.trans_names)
+        self.trans_to.Clear()
+        self.trans_to.AppendItems(self.trans_names)
+        
+        if current_from_code in self.trans_codes: self.trans_from.SetSelection(self.trans_codes.index(current_from_code))
+        if current_to_code in self.trans_codes: self.trans_to.SetSelection(self.trans_codes.index(current_to_code))
+        
+        if is_local:
+            f = self.trans_codes[self.trans_from.GetSelection()]
+            t = self.trans_codes[self.trans_to.GetSelection()]
+            if translator_instance.is_model_installed(f, t):
+                self.btn_download.SetLabel(f"Eliminar Modelo {f} -> {t}")
+                self.btn_download.SetForegroundColour(wx.RED)
+                self.is_delete_mode = True
+            else:
+                self.btn_download.SetLabel(f"Descargar Modelo {f} -> {t}")
+                self.btn_download.SetForegroundColour(wx.NullColour)
+                self.is_delete_mode = False
+                
+        self.tab_trans.Layout()
 
     def on_trans_action(self, event):
         from translator import translator_instance
@@ -287,7 +425,13 @@ class ConfigWindow(wx.Dialog):
         c = self.temp_config; defs = DEFAULT_CONFIG["global"]
         l_map = {"latin":0, "chinese":1, "japanese":1, "korean":2, "cyrillic":3, "thai":4, "arabic":5, "hindi":6}
         self.lang_choice.SetSelection(l_map.get(c.get("ocr_language", "latin"), 0))
-        self.use_gpu.SetValue(c.get("use_gpu", True))
+        device = c.get("openvino_device", "AUTO")
+        if "openvino_device" not in c and "use_gpu" in c:
+            device = "GPU" if c["use_gpu"] else "CPU"
+        d_idx = 0
+        if device == "GPU": d_idx = 1
+        elif device == "AUTO": d_idx = 2
+        self.device_choice.SetSelection(d_idx)
         for kid in self.PRO_NAMES: getattr(self, f"btn_{kid}").SetLabel(f"{self.PRO_NAMES[kid]}: {c.get(kid, defs.get(kid, 'Sin asignar'))}")
         self.min_conf.SetValue(int(c.get("min_confidence", 0.5) * 100)); s_map = {0.35:0, 0.5:1, 0.75:2, 1.0:3, 2.0:4}
         self.scale_choice.SetSelection(s_map.get(c.get("image_scale", 1.0), 3))
@@ -295,31 +439,71 @@ class ConfigWindow(wx.Dialog):
         self.crop_l.SetValue(int(c.get("crop_left", 0))); self.crop_r.SetValue(int(c.get("crop_right", 0)))
         self.row_tol.SetValue(int(c.get("row_tolerance", 20)))
         self.shadow_burst.SetValue(int(c.get("shadow_burst_count", 4)))
+        self.use_clahe.SetValue(c.get("use_clahe", False))
+        self.use_sharpening.SetValue(c.get("use_sharpening", False))
+        self.use_binarization.SetValue(c.get("use_binarization", False))
+        self.use_dilation.SetValue(c.get("use_dilation", False))
+        self.auto_rescan.SetValue(c.get("auto_rescan_after_click", False))
+        self.auto_rescan_delay.SetValue(int(c.get("auto_rescan_delay", 5)))
         self.dyn_target.SetSelection(0 if c.get("dynamic_target", "screen") == "screen" else 1)
-        self.dyn_interval.SetValue(int(c.get("dynamic_interval", 1.0) * 10)); self.dyn_sens.SetValue(int(c.get("dynamic_sensitivity", 50)))
+        self.dyn_interval.SetValue(int(c.get("dynamic_interval", 1.0) * 10))
+        sens_val = int(c.get("dynamic_sensitivity", 50))
+        if sens_val <= 20: s_idx = 0
+        elif sens_val <= 40: s_idx = 1
+        elif sens_val <= 60: s_idx = 2
+        elif sens_val <= 80: s_idx = 3
+        else: s_idx = 4
+        self.dyn_sens.SetSelection(s_idx)
         self.dyn_diff.SetValue(c.get("dynamic_diff_mode", False))
-        self.trans_enabled.SetValue(c.get("translate_enabled", False))
+        self.dyn_interrupt.SetValue(c.get("dynamic_interrupt", False))
+        t_type = c.get("translate_type", "local" if c.get("translate_enabled", False) else "disabled")
+        if t_type == "disabled": t_idx = 0
+        elif t_type == "local": t_idx = 1
+        else: t_idx = 2 # online
+        self.trans_type.SetSelection(t_idx)
         f_code = c.get("translate_from", "en"); t_code = c.get("translate_to", "es")
         if f_code in self.trans_codes: self.trans_from.SetSelection(self.trans_codes.index(f_code))
         if t_code in self.trans_codes: self.trans_to.SetSelection(self.trans_codes.index(t_code))
+        
+        # Nuevo: Cargar servicio y swap
+        service = c.get("translate_service", "google")
+        self.trans_service.SetStringSelection(service)
+        self.trans_swap.SetValue(c.get("translate_swap", False))
+        
         self.update_trans_ui()
 
     def _update_temp_config_from_ui(self):
         l_codes = ["latin", "chinese", "korean", "cyrillic", "thai", "arabic", "hindi"]
         self.temp_config["ocr_language"] = l_codes[self.lang_choice.GetSelection()]
-        self.temp_config["use_gpu"] = self.use_gpu.GetValue()
+        d_map = {0: "CPU", 1: "GPU", 2: "AUTO"}
+        self.temp_config["openvino_device"] = d_map.get(self.device_choice.GetSelection(), "AUTO")
         self.temp_config["min_confidence"] = self.min_conf.GetValue() / 100.0
         s_vals = [0.35, 0.5, 0.75, 1.0, 2.0]; self.temp_config["image_scale"] = s_vals[self.scale_choice.GetSelection()]
         self.temp_config["crop_top"] = self.crop_t.GetValue(); self.temp_config["crop_bottom"] = self.crop_b.GetValue()
         self.temp_config["crop_left"] = self.crop_l.GetValue(); self.temp_config["crop_right"] = self.crop_r.GetValue()
         self.temp_config["row_tolerance"] = self.row_tol.GetValue()
         self.temp_config["shadow_burst_count"] = self.shadow_burst.GetValue()
+        self.temp_config["use_clahe"] = self.use_clahe.GetValue()
+        self.temp_config["use_sharpening"] = self.use_sharpening.GetValue()
+        self.temp_config["use_binarization"] = self.use_binarization.GetValue()
+        self.temp_config["use_dilation"] = self.use_dilation.GetValue()
+        self.temp_config["auto_rescan_after_click"] = self.auto_rescan.GetValue()
+        self.temp_config["auto_rescan_delay"] = self.auto_rescan_delay.GetValue()
         self.temp_config["dynamic_target"] = "screen" if self.dyn_target.GetSelection() == 0 else "window"
-        self.temp_config["dynamic_interval"] = self.dyn_interval.GetValue() / 10.0; self.temp_config["dynamic_sensitivity"] = self.dyn_sens.GetValue()
+        self.temp_config["dynamic_interval"] = self.dyn_interval.GetValue() / 10.0
+        s_vals = [20, 40, 60, 80, 100]
+        self.temp_config["dynamic_sensitivity"] = s_vals[self.dyn_sens.GetSelection()]
         self.temp_config["dynamic_diff_mode"] = self.dyn_diff.GetValue()
-        self.temp_config["translate_enabled"] = self.trans_enabled.GetValue()
-        self.temp_config["translate_from"] = self.trans_codes[self.trans_from.GetSelection()]
-        self.temp_config["translate_to"] = self.trans_codes[self.trans_to.GetSelection()]
+        self.temp_config["dynamic_interrupt"] = self.dyn_interrupt.GetValue()
+        t_idx = self.trans_type.GetSelection()
+        t_vals = ["disabled", "local", "online"]
+        self.temp_config["translate_type"] = t_vals[t_idx]
+        self.temp_config["translate_enabled"] = (t_idx != 0)
+        codes = getattr(self, "current_trans_codes", self.trans_codes)
+        self.temp_config["translate_from"] = codes[self.trans_from.GetSelection()]
+        self.temp_config["translate_to"] = codes[self.trans_to.GetSelection()]
+        self.temp_config["translate_service"] = self.trans_service.GetStringSelection()
+        self.temp_config["translate_swap"] = self.trans_swap.GetValue()
 
     def on_save(self, event):
         self._update_temp_config_from_ui()

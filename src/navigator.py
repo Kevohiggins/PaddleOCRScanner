@@ -50,8 +50,9 @@ def string_to_hotkey(s, default_s=""):
     return vk, mask
 
 class ElementNavigator:
-    def __init__(self, tts, config, offset_x=0, offset_y=0):
+    def __init__(self, tts, config, offset_x=0, offset_y=0, rescan_callback=None):
         self.tts = tts; self.config = config; self.offset_x = offset_x; self.offset_y = offset_y
+        self.rescan_callback = rescan_callback
         self.elements = []; self.index = -1; self._hook = None; self._running = False
 
     def navigate(self, elements):
@@ -144,9 +145,13 @@ class ElementNavigator:
             def do_copy():
                 if wx.TheClipboard.Open():
                     wx.TheClipboard.SetData(wx.TextDataObject(text))
+                    wx.TheClipboard.Flush()
                     wx.TheClipboard.Close()
+                    self.tts.speak("Copiado.", interrupt=True)
+                else:
+                    self.tts.speak("Error al abrir portapapeles.", interrupt=True)
             wx.CallAfter(do_copy)
-            self.tts.speak("Copiado.", interrupt=True)
+        return True
 
     def _announce(self):
         if 0 <= self.index < len(self.elements):
@@ -156,7 +161,12 @@ class ElementNavigator:
                 from translator import translator_instance
                 from_code = self.config.get("translate_from", "en")
                 to_code = self.config.get("translate_to", "es")
-                text = translator_instance.translate(text, from_code, to_code)
+                text = translator_instance.translate(
+                    text, from_code, to_code, 
+                    translate_type=self.config.get("translate_type", "local"),
+                    service=self.config.get("translate_service", "google"),
+                    swap=self.config.get("translate_swap", False)
+                )
             
             self._last_announced_text = text
             self.tts.speak(f"{text} {self.index+1} de {len(self.elements)}", interrupt=True)
@@ -174,3 +184,12 @@ class ElementNavigator:
             elif mode == "right":
                 m_text = "derecho"; win32api.mouse_event(win32con.MOUSEEVENTF_RIGHTDOWN, 0, 0); win32api.mouse_event(win32con.MOUSEEVENTF_RIGHTUP, 0, 0)
             self.tts.speak(f"Click {m_text}"); self._stop()
+            
+            # Auto-rescan logic
+            if self.config.get("auto_rescan_after_click", False) and self.rescan_callback:
+                delay = self.config.get("auto_rescan_delay", 5) / 10.0
+                def do_rescan():
+                    time.sleep(delay)
+                    self.rescan_callback()
+                import threading
+                threading.Thread(target=do_rescan, daemon=True).start()
