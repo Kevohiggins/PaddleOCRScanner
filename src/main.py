@@ -66,10 +66,12 @@ class TrayIcon(wx.adv.TaskBarIcon):
         menu = wx.Menu()
         help_item = menu.Append(wx.ID_ANY, "Ayuda")
         config_item = menu.Append(wx.ID_ANY, "Configuración")
+        update_item = menu.Append(wx.ID_ANY, "Buscar Actualizaciones")
         exit_item = menu.Append(wx.ID_ANY, "Salir")
         
         self.Bind(wx.EVT_MENU, self.on_help, help_item)
         self.Bind(wx.EVT_MENU, self.on_config, config_item)
+        self.Bind(wx.EVT_MENU, self.on_update, update_item)
         self.Bind(wx.EVT_MENU, self.on_exit, exit_item)
         
         return menu
@@ -82,6 +84,10 @@ class TrayIcon(wx.adv.TaskBarIcon):
 
     def on_config(self, event):
         self.scanner._on_open_config()
+
+    def on_update(self, event):
+        from updater import check_updates_async
+        check_updates_async(None)
 
     def on_exit(self, event):
         self.scanner._on_quit_hotkey()
@@ -123,6 +129,12 @@ class PaddleOCRScanner:
     def start(self):
         self.tts.play_startup()
         self.tts.speak("Cargando scanner.")
+        
+        # Buscar actualizaciones automáticamente si está habilitado
+        if self.config.get("auto_check_updates", True):
+            from updater import check_updates_async
+            wx.CallLater(5000, check_updates_async, None, True)
+            
         try:
             self.ocr.initialize()
             translator_instance.set_on_ready_callback(lambda: self.tts.speak("Motor de traducción listo.") if self.config.get("translate_enabled") else None)

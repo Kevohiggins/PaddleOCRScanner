@@ -10,6 +10,7 @@ def get_base_path():
     return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 CONFIG_FILE = os.path.join(get_base_path(), "config.json")
+VERSION = "1.3"
 
 DEFAULT_CONFIG = {
     "global": {
@@ -17,6 +18,7 @@ DEFAULT_CONFIG = {
         "min_confidence": 0.3,
         "openvino_device": "AUTO",
         "image_scale": 0.5,
+        "auto_check_updates": True,
         "hotkey_screen": "ctrl+alt+s",
         "hotkey_window": "ctrl+alt+w",
         "hotkey_config": "ctrl+alt+c",

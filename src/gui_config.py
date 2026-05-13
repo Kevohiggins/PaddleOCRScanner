@@ -169,7 +169,12 @@ class ConfigWindow(wx.Dialog):
         grid.Add(wx.StaticText(self.tab_general, label="Dispositivo OpenVINO:"), 0, wx.ALIGN_CENTER_VERTICAL)
         self.device_choice = wx.Choice(self.tab_general, choices=["Solo CPU", "Solo GPU (Integrada)", "Automático (AUTO)"], name="Dispositivo OpenVINO")
         grid.Add(self.device_choice, 1, wx.EXPAND)
-        sizer.Add(grid, 1, wx.EXPAND | wx.ALL, 20); self.tab_general.SetSizer(sizer)
+        
+        self.auto_update_cb = wx.CheckBox(self.tab_general, label="Buscar actualizaciones automáticamente al iniciar", name="Buscar Actualizaciones")
+        
+        sizer.Add(grid, 0, wx.EXPAND | wx.ALL, 20)
+        sizer.Add(self.auto_update_cb, 0, wx.ALL, 20)
+        self.tab_general.SetSizer(sizer)
 
     def _add_spin(self, parent, sizer, label, min_v, max_v, name=""):
         sizer.Add(wx.StaticText(parent, label=label), 0, wx.ALIGN_CENTER_VERTICAL)
@@ -432,6 +437,7 @@ class ConfigWindow(wx.Dialog):
         if device == "GPU": d_idx = 1
         elif device == "AUTO": d_idx = 2
         self.device_choice.SetSelection(d_idx)
+        self.auto_update_cb.SetValue(c.get("auto_check_updates", True))
         for kid in self.PRO_NAMES: getattr(self, f"btn_{kid}").SetLabel(f"{self.PRO_NAMES[kid]}: {c.get(kid, defs.get(kid, 'Sin asignar'))}")
         self.min_conf.SetValue(int(c.get("min_confidence", 0.5) * 100)); s_map = {0.35:0, 0.5:1, 0.75:2, 1.0:3, 2.0:4}
         self.scale_choice.SetSelection(s_map.get(c.get("image_scale", 1.0), 3))
@@ -477,6 +483,7 @@ class ConfigWindow(wx.Dialog):
         self.temp_config["ocr_language"] = l_codes[self.lang_choice.GetSelection()]
         d_map = {0: "CPU", 1: "GPU", 2: "AUTO"}
         self.temp_config["openvino_device"] = d_map.get(self.device_choice.GetSelection(), "AUTO")
+        self.temp_config["auto_check_updates"] = self.auto_update_cb.GetValue()
         self.temp_config["min_confidence"] = self.min_conf.GetValue() / 100.0
         s_vals = [0.35, 0.5, 0.75, 1.0, 2.0]; self.temp_config["image_scale"] = s_vals[self.scale_choice.GetSelection()]
         self.temp_config["crop_top"] = self.crop_t.GetValue(); self.temp_config["crop_bottom"] = self.crop_b.GetValue()
