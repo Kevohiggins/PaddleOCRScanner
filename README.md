@@ -8,17 +8,26 @@ Este programa cumple la misma función que el OCR nativo de Windows, pero usando
 
 PaddleOCR Scanner captura lo que tenés en pantalla y te permite navegar el texto detectado con el teclado, simulando un "cursor virtual" sobre los elementos.
 
-Si querés más info, chequeá el manual.
+## Características Destacadas
 
-## Aclaración importante
+*   **Motor Robusto:** Basado en PaddleOCR (vía RapidOCR) con aceleración **OpenVINO** para reconocimiento rápido.
+*   **OCR Dinámico:** Capaz de monitorear la pantalla y reaccionar a los cambios en tiempo real (ideal para juegos o subtítulos).
+*   **Traducción Integrada:** Soporta traducción online (Google, DeepL, etc.) y **offline** (vía Argos Translate).
+*   **Perfiles por Aplicación:** Guarda configuraciones específicas (recortes, idioma, precisión) para cada programa que uses.
+*   **Actualizador:** Ya no precisás descargar el archivo completo en cada versió, el actualizador baja lo necesario.
 
-Para que el programa pueda capturar teclas globales y hacer clicks en ventanas que tienen privilegios elevados (como el Administrador de Tareas o instaladores), **es necesario ejecutar PaddleOCR Scanner como Administrador**.
+## Descarga y Uso
+
+1.  Descargá la última versión desde la sección de [Lanzamientos](https://github.com/Kevohiggins/PaddleOCRScanner/releases/latest).
+2.  Extraé y ejecutá `PaddleOCR Scanner.exe`, preferentemente como administrador por los comandos globales.
+
+Para entender cómo funciona cada modo y ver todos los atajos, **leé el `manual.html`** que viene incluido en la descarga.
 
 ## Créditos y Apoyo
 
-Quiero dejar en claro que yo no escribí el código de esto. Todo fue programado por **Gemini**, la inteligencia artificial de Google. Mi trabajo fue idear el proyecto, promptear como un desgraciado, testear y reportar bugs.
+Quiero dejar en claro que yo no escribí el código de esto. Todo fue programado usando IA (en este caso Antigravity). Mi trabajo fue idear el proyecto, promptear como un desgraciado, testear y reportar bugs.
 
-Si este programa te salvó las papas y querés bancarme con una birra, podés hacerlo acá:
+Si este programa te sirvió para algo y querés donarme para comprar birra, podés hacerlo acá:
 *   [Mercado Pago](https://link.mercadopago.com.ar/kevohiggins) (Si sos de Argentina)
 *   [PayPal](https://www.paypal.com/paypalme/KevOHiggins) (Si sos de afuera)
 
