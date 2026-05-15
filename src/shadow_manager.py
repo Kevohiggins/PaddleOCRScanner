@@ -29,9 +29,11 @@ class ShadowManager:
             if os.path.exists(self.config_path):
                 with open(self.config_path, 'r', encoding='utf-8') as f: data = json.load(f)
             data["shadow_profiles"] = self.profiles
+            
             if "profiles" not in data: data["profiles"] = {}
-            for app in self.profiles:
-                if app != "Global" and app not in data["profiles"]: data["profiles"][app] = {}
+            if self.current_app != "Global" and self.current_app not in data["profiles"]:
+                data["profiles"][self.current_app] = data.get("global", {}).copy()
+                
             with open(self.config_path, 'w', encoding='utf-8') as f: json.dump(data, f, indent=4, ensure_ascii=False)
         except: pass
 

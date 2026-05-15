@@ -380,10 +380,12 @@ class PaddleOCRScanner:
 
     def _open_config_native(self):
         from gui_config import show_config_window
-        res = show_config_window(self.full_config, self._last_profile, restart_callback=self.restart_app)
+        app_name = self._get_current_app_name()
+        res = show_config_window(self.full_config, self._last_profile, active_app=app_name, restart_callback=self.restart_app)
         if res:
             old_trans = self.config.get("translate_enabled", False)
             self.full_config = res
+            self.shadow.load()
             self._update_profile()
             new_trans = self.config.get("translate_enabled", False)
             

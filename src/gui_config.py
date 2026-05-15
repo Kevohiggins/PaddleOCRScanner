@@ -75,10 +75,11 @@ class ConfigWindow(wx.Dialog):
         "hotkey_manual": "Abrir Manual", "hotkey_toggle_auto_rescan": "Alternar Reescaneo"
     }
 
-    def __init__(self, parent, full_config, current_profile="Global", restart_callback=None):
+    def __init__(self, parent, full_config, current_profile="Global", active_app="", restart_callback=None):
         super().__init__(parent, title="Configuración de PaddleOCR Scanner", size=(650, 600))
         self.full_config = full_config
         self.current_profile = current_profile
+        self.active_app = active_app
         self.temp_config = full_config["profiles"].get(current_profile, full_config["global"]).copy()
         self.restart_callback = restart_callback
         self.is_delete_mode = False
@@ -405,7 +406,7 @@ class ConfigWindow(wx.Dialog):
         self.update_ui_from_config()
 
     def on_add_profile(self, event):
-        dlg = wx.TextEntryDialog(self, "Nombre del nuevo perfil:", "Añadir Perfil")
+        dlg = wx.TextEntryDialog(self, f"Nombre del nuevo perfil (ej. {self.active_app if self.active_app else 'notepad.exe'}):", "Añadir Perfil", value=self.active_app)
         if dlg.ShowModal() == wx.ID_OK:
             name = dlg.GetValue().strip()
             if name and name not in self.full_config["profiles"]:
@@ -414,10 +415,15 @@ class ConfigWindow(wx.Dialog):
 
     def on_del_profile(self, event):
         p = self.profile_choice.GetStringSelection()
-        if p != "Global" and wx.MessageBox(f"¿Eliminar perfil '{p}'?", "Confirmar", wx.YES_NO) == wx.YES:
+        if p != "Global" and wx.MessageBox(f"¿Eliminar perfil '{p}' y sus sombras asociadas?", "Confirmar", wx.YES_NO) == wx.YES:
             del self.full_config["profiles"][p]
+            if "shadow_profiles" in self.full_config and p in self.full_config["shadow_profiles"]:
+                del self.full_config["shadow_profiles"][p]
             self.profile_choice.Delete(self.profile_choice.GetSelection())
-            self.profile_choice.SetSelection(0); self.on_profile_change(None)
+            self.current_profile = "Global"
+            self.profile_choice.SetSelection(0)
+            self.temp_config = self.full_config["global"].copy()
+            self.update_ui_from_config()
 
     def on_capture(self, event):
         btn = event.GetEventObject(); kid = btn.GetName()
@@ -518,8 +524,8 @@ class ConfigWindow(wx.Dialog):
         else: self.full_config["profiles"][self.current_profile] = self.temp_config.copy()
         save_config(self.full_config); self.EndModal(wx.ID_OK)
 
-def show_config_window(full_config, current_profile="Global", restart_callback=None):
-    dlg = ConfigWindow(None, full_config, current_profile, restart_callback=restart_callback)
+def show_config_window(full_config, current_profile="Global", active_app="", restart_callback=None):
+    dlg = ConfigWindow(None, full_config, current_profile, active_app=active_app, restart_callback=restart_callback)
     dlg.Raise()
     dlg.SetFocus()
     if dlg.ShowModal() == wx.ID_OK: return dlg.full_config
