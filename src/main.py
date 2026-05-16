@@ -1,5 +1,5 @@
 """
-PaddleOCR Screen Scanner — Versión Estable con Traducción Argos Estándar.
+# PaddleOCR Scanner
 """
 
 import ctypes

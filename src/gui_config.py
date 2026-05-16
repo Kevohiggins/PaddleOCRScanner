@@ -272,7 +272,7 @@ class ConfigWindow(wx.Dialog):
         
         grid.Add(wx.StaticText(self.tab_trans, label="Tipo de traducción:"), 0, wx.ALIGN_CENTER_VERTICAL)
         self.trans_type = wx.Choice(self.tab_trans, choices=[
-            "Desactivada", "Local (Argos)", "Online (Translators)"
+            "Desactivada", "Local (Offline)", "Online (Translators)"
         ], name="Tipo de traducción")
         self.trans_type.Bind(wx.EVT_CHOICE, self.update_trans_ui)
         grid.Add(self.trans_type, 1, wx.EXPAND)
@@ -324,7 +324,7 @@ class ConfigWindow(wx.Dialog):
         self.trans_from.Enable(enabled)
         self.trans_to.Enable(enabled)
         
-        # Ocultar/Mostrar controles específicos de Argos (Local)
+        # Ocultar/Mostrar controles específicos de Offline (Local)
         self.btn_download.Show(is_local)
         self.trans_status.Show(is_local)
         self.trans_prog.Show(is_local)
@@ -343,7 +343,7 @@ class ConfigWindow(wx.Dialog):
                 current_to_code = self.current_trans_codes[self.trans_to.GetSelection()]
             except: pass
             
-        # Usamos siempre la lista de idiomas de Argos (estática) para simplificar
+        # Usamos siempre la lista de idiomas Offline (estática) para simplificar
         # y remover la dependencia de deep_translator.
         self.current_trans_names = self.trans_names
         self.current_trans_codes = self.trans_codes
@@ -384,18 +384,16 @@ class ConfigWindow(wx.Dialog):
                 if translator_instance.download_model(f_code, t_code, up):
                     wx.CallAfter(self.on_download_complete)
                 else:
-                    wx.CallAfter(wx.MessageBox, "Error en descarga.", "Error")
+                    wx.CallAfter(lambda: wx.MessageBox("Error en descarga.", "Error", parent=self))
                 wx.CallAfter(self.btn_download.Enable); wx.CallAfter(self.update_trans_ui)
             threading.Thread(target=run, daemon=True).start()
 
     def on_download_complete(self):
-        msg = "Modelo descargado con éxito. Para que el motor de traducción reconozca los nuevos idiomas, es necesario reiniciar la aplicación.\n\n¿Desea reiniciar ahora?"
-        if wx.MessageBox(msg, "Reinicio Necesario", wx.YES_NO | wx.ICON_QUESTION) == wx.YES:
-            if self.restart_callback:
-                self.on_save(None)
-                self.restart_callback()
-        else:
-            self.update_trans_ui()
+        from translator import translator_instance
+        translator_instance.refresh_languages()
+        self.update_trans_ui()
+        wx.MessageBox("Modelo descargado", "Éxito", parent=self)
+        self.btn_download.SetFocus()
 
     def on_profile_change(self, event):
         new_p = self.profile_choice.GetStringSelection(); self._update_temp_config_from_ui()

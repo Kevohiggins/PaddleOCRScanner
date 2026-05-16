@@ -109,6 +109,10 @@ def apply_update(base_path, zip_path):
         # El archivo BAT usa robocopy para mover los archivos de forma robusta
         bat_content = f"""@echo off
 timeout /t 5 /nobreak > nul
+rmdir /s /q "{os.path.join(base_path, '_internal', 'torch')}" > nul 2>&1
+rmdir /s /q "{os.path.join(base_path, '_internal', 'stanza')}" > nul 2>&1
+rmdir /s /q "{os.path.join(base_path, '_internal', 'argostranslate')}" > nul 2>&1
+rmdir /s /q "{os.path.join(base_path, 'models', 'argostranslate')}" > nul 2>&1
 robocopy "{source_dir}" "{base_path}" /E /MOVE /IS /IT /R:5 /W:1 > nul
 rmdir /s /q "{tmp_dir}"
 del "{zip_path}"

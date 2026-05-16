@@ -17,11 +17,8 @@ datas = [
 datas += collect_data_files('rapidocr_openvino')
 datas += collect_data_files('openvino')
 
-# --- Nuevo: datos de Argos y sus dependencias ---
-datas += collect_data_files('argostranslate')
-datas += collect_data_files('stanza')
+# --- Nuevo: datos de CTranslate2 y SentencePiece ---
 datas += collect_data_files('sentencepiece')
-datas += collect_data_files('certifi')
 
 # 2. Binarios — Exactamente como el viejo .spec
 binaries = collect_dynamic_libs('openvino')
@@ -54,25 +51,18 @@ a = Analysis(
         'win32gui',
         'win32process',
         'win32api',
-        # --- Nuevo: para Argos Translate ---
-        'argostranslate',
-        'argostranslate.translate',
-        'argostranslate.package',
-        'argostranslate.settings',
-        'argostranslate.sbd',
+        # --- Nuevo: CTranslate2 ---
         'ctranslate2',
         'ctranslate2._ext',
         'sentencepiece',
-        'stanza',
-        'torch',
-        'certifi',
-        'charset_normalizer',
         # --- Para accesibilidad ---
         'accessible_output2',
         'accessible_output2.outputs.sapi5',
         'accessible_output2.outputs.nvda',
         'psutil',
         'cv2',
+        'translators',
+        'js2py',
     ],
     hookspath=[],
     hooksconfig={},
