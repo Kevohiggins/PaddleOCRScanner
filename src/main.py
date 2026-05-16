@@ -264,9 +264,10 @@ class PaddleOCRScanner:
             threading.Thread(target=self._dynamic_scan_loop, daemon=True).start()
 
     def _dynamic_scan_loop(self):
+        import cv2
         prev_text = ""
         prev_elements_texts = set()
-        prev_img_hash = None
+        prev_small_img = None
         while self.is_dynamic_running:
             loop_start = time.time()
             try:
@@ -274,16 +275,29 @@ class PaddleOCRScanner:
                 img, ox, oy = capture_active_window() if self.config.get("dynamic_target") == "window" else capture_screen()
                 img, ox, oy = self._apply_crops(img, ox, oy)
 
-                # Atajo rápido: si la imagen no cambió, no gastar CPU en OCR
-                import hashlib
-                img_hash = hashlib.md5(img.tobytes()).digest()
-                if img_hash == prev_img_hash:
-                    # El usuario sugirió poner el sleep aquí. Esperamos el intervalo configurado.
-                    elapsed = time.time() - loop_start
-                    remaining = max(0.1, float(self.config.get("dynamic_interval", 1.0)) - elapsed)
-                    time.sleep(remaining)
-                    continue
-                prev_img_hash = img_hash
+                # Atajo rápido: Comparación visual fuzzy con OpenCV para ahorrar CPU
+                sens_val = int(self.config.get("dynamic_sensitivity", 50))
+                
+                # Reducimos la imagen a un tamaño pequeño para promediar ruido y ganar velocidad
+                small_img = cv2.resize(img, (128, 128))
+                
+                if prev_small_img is not None:
+                    # Calculamos la diferencia absoluta entre la imagen actual y la anterior
+                    diff = cv2.absdiff(small_img, prev_small_img)
+                    diff_score = np.mean(diff) / 255.0 # 0.0 (iguales) a 1.0 (totalmente distintas)
+                    
+                    # Mapeamos la sensibilidad al umbral de cambio de imagen
+                    # Alta (100) -> 0.0005 (sensibilidad extrema)
+                    # Baja (20) -> 0.1 (exige 10% de cambio visual)
+                    img_threshold = max(0.0005, (100 - sens_val) * 0.0012)
+                    
+                    if diff_score < img_threshold:
+                        elapsed = time.time() - loop_start
+                        remaining = max(0.1, float(self.config.get("dynamic_interval", 1.0)) - elapsed)
+                        time.sleep(remaining)
+                        continue
+                
+                prev_small_img = small_img.copy()
 
                 with self._scan_lock: elements = self.ocr.scan_image(img)
                 self._last_elements = elements
@@ -291,28 +305,34 @@ class PaddleOCRScanner:
 
                 sens_val = int(self.config.get("dynamic_sensitivity", 50))
                 if sens_val >= 100: # Alta
-                    min_len = 1; threshold = 0.9
+                    min_len = 1; threshold = 0.95
                 elif sens_val >= 80: # Media Alta
-                    min_len = 1; threshold = 0.7
+                    min_len = 1; threshold = 0.8
                 elif sens_val >= 60: # Normal
-                    min_len = 2; threshold = 0.5
+                    min_len = 2; threshold = 0.6
                 elif sens_val >= 40: # Media Baja
-                    min_len = 3; threshold = 0.3
+                    min_len = 3; threshold = 0.4
                 else: # Baja
-                    min_len = 4; threshold = 0.1
+                    min_len = 5; threshold = 0.2
 
                 if self.config.get("dynamic_diff_mode", False):
-                    # Modo Diferencial: solo leer lo nuevo
+                    # Modo Diferencial: memoria acumulativa para evitar repeticiones por fluctuaciones
                     current_texts = [e.text.strip() for e in elements if len(e.text.strip()) >= min_len]
                     new_texts = []
+                    
                     for txt in current_texts:
-                        is_old = False
-                        for prev in prev_elements_texts:
-                            if SequenceMatcher(None, txt.lower(), prev.lower()).ratio() >= threshold:
-                                is_old = True; break
-                        if not is_old:
+                        is_present = False
+                        # Comparamos contra lo que hay ACTUALMENTE en pantalla
+                        for seen in prev_elements_texts:
+                            if SequenceMatcher(None, txt.lower(), seen.lower()).ratio() >= threshold:
+                                is_present = True; break
+                        
+                        if not is_present:
                             new_texts.append(txt)
+                    
+                    # Actualizamos la memoria: Solo lo que está presente AHORA
                     prev_elements_texts = set(current_texts)
+                    
                     if new_texts:
                         new_text = " ".join(new_texts)
                         if self.config.get("translate_enabled"):
@@ -326,8 +346,8 @@ class PaddleOCRScanner:
                             )
                         self.tts.speak(new_text, interrupt=self.config.get("dynamic_interrupt", False))
                 else:
-                    # Modo clásico: leer todo si cambió
-                    filtered_elements = [e for e in elements if len(e.text.strip()) >= min_len]
+                    # Modo clásico: se resetea la memoria diferencial para que no interfiera
+                    prev_elements_texts.clear()
                     full_text = " ".join([e.text for e in filtered_elements]).strip()
                     if full_text and SequenceMatcher(None, prev_text, full_text).ratio() < threshold:
                         prev_text = full_text
