@@ -15,7 +15,7 @@ import win32api
 import win32process
 from difflib import SequenceMatcher
 
-from config import load_config, save_config, CONFIG_FILE, get_effective_config, get_base_path
+from config import load_config, save_config, CONFIG_FILE, get_effective_config, get_base_path, VERSION
 from tts_engine import TTSEngine
 from ocr_engine import OCREngine
 from screen_capture import capture_screen, capture_active_window
@@ -57,7 +57,7 @@ class TrayIcon(wx.adv.TaskBarIcon):
         
         # Usamos un icono estándar de información si no hay uno específico
         icon = wx.ArtProvider.GetIcon(wx.ART_INFORMATION, wx.ART_OTHER, (16, 16))
-        self.SetIcon(icon, "PaddleOCRScanner")
+        self.SetIcon(icon, f"PaddleOCR Scanner v{VERSION}")
         
         self.Bind(wx.adv.EVT_TASKBAR_RIGHT_DOWN, self.on_click)
         self.Bind(wx.adv.EVT_TASKBAR_LEFT_DOWN, self.on_click)
@@ -128,7 +128,7 @@ class PaddleOCRScanner:
 
     def start(self):
         self.tts.play_startup()
-        self.tts.speak("Cargando scanner.")
+        self.tts.speak(f"Iniciando PaddleOCR Scanner versión {VERSION}.")
         
         # Buscar actualizaciones automáticamente si está habilitado
         if self.config.get("auto_check_updates", True):
