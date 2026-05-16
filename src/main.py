@@ -286,16 +286,31 @@ class PaddleOCRScanner:
                     diff = cv2.absdiff(small_img, prev_small_img)
                     diff_score = np.mean(diff) / 255.0 # 0.0 (iguales) a 1.0 (totalmente distintas)
                     
-                    # Mapeamos la sensibilidad al umbral de cambio de imagen
-                    # Alta (100) -> 0.0005 (sensibilidad extrema)
-                    # Baja (20) -> 0.1 (exige 10% de cambio visual)
-                    img_threshold = max(0.0005, (100 - sens_val) * 0.0012)
+                # Definimos los umbrales de las 5 escalas:
+                if sens_val >= 100: # Alta
+                    min_len = 1; threshold = 0.98; img_threshold = 0.0001
+                elif sens_val >= 80: # Media Alta
+                    min_len = 1; threshold = 0.85; img_threshold = 0.01
+                elif sens_val >= 60: # Normal
+                    min_len = 2; threshold = 0.60; img_threshold = 0.04
+                elif sens_val >= 40: # Media Baja
+                    min_len = 3; threshold = 0.35; img_threshold = 0.10
+                else: # Baja (20)
+                    min_len = 6; threshold = 0.10; img_threshold = 0.25
+
+                if prev_small_img is not None:
+                    # Calculamos la diferencia absoluta
+                    diff = cv2.absdiff(small_img, prev_small_img)
+                    diff_score = np.mean(diff) / 255.0
                     
                     if diff_score < img_threshold:
                         elapsed = time.time() - loop_start
                         remaining = max(0.1, float(self.config.get("dynamic_interval", 1.0)) - elapsed)
                         time.sleep(remaining)
                         continue
+                    else:
+                        # Si hubo un cambio visual real, reseteamos la memoria diferencial
+                        prev_elements_texts.clear()
                 
                 prev_small_img = small_img.copy()
 
@@ -303,20 +318,8 @@ class PaddleOCRScanner:
                 self._last_elements = elements
                 elements = self.shadow.filter_elements(elements)
 
-                sens_val = int(self.config.get("dynamic_sensitivity", 50))
-                if sens_val >= 100: # Alta
-                    min_len = 1; threshold = 0.95
-                elif sens_val >= 80: # Media Alta
-                    min_len = 1; threshold = 0.8
-                elif sens_val >= 60: # Normal
-                    min_len = 2; threshold = 0.6
-                elif sens_val >= 40: # Media Baja
-                    min_len = 3; threshold = 0.4
-                else: # Baja
-                    min_len = 5; threshold = 0.2
-
                 if self.config.get("dynamic_diff_mode", False):
-                    # Modo Diferencial: memoria acumulativa para evitar repeticiones por fluctuaciones
+                    # Modo Diferencial: memoria acumulativa
                     current_texts = [e.text.strip() for e in elements if len(e.text.strip()) >= min_len]
                     new_texts = []
                     
@@ -348,6 +351,7 @@ class PaddleOCRScanner:
                 else:
                     # Modo clásico: se resetea la memoria diferencial para que no interfiera
                     prev_elements_texts.clear()
+                    filtered_elements = [e for e in elements if len(e.text.strip()) >= min_len]
                     full_text = " ".join([e.text for e in filtered_elements]).strip()
                     if full_text and SequenceMatcher(None, prev_text, full_text).ratio() < threshold:
                         prev_text = full_text
