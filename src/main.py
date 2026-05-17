@@ -275,44 +275,47 @@ class PaddleOCRScanner:
                 img, ox, oy = capture_active_window() if self.config.get("dynamic_target") == "window" else capture_screen()
                 img, ox, oy = self._apply_crops(img, ox, oy)
 
-                # Atajo rápido: Comparación visual fuzzy con OpenCV para ahorrar CPU
+                # Atajo rápido: Comparación visual de píxeles activos en grises con OpenCV
                 sens_val = int(self.config.get("dynamic_sensitivity", 50))
                 
-                # Reducimos la imagen a un tamaño pequeño para promediar ruido y ganar velocidad
+                # Miniatura reducida y convertida a escala de grises para eliminar ruido de color
                 small_img = cv2.resize(img, (128, 128))
+                small_gray = cv2.cvtColor(small_img, cv2.COLOR_BGR2GRAY)
                 
-                if prev_small_img is not None:
-                    # Calculamos la diferencia absoluta entre la imagen actual y la anterior
-                    diff = cv2.absdiff(small_img, prev_small_img)
-                    diff_score = np.mean(diff) / 255.0 # 0.0 (iguales) a 1.0 (totalmente distintas)
-                    
-                # Definimos los umbrales de las 5 escalas:
-                if sens_val >= 100: # Alta
-                    min_len = 1; threshold = 0.98; img_threshold = 0.0001
-                elif sens_val >= 80: # Media Alta
-                    min_len = 1; threshold = 0.85; img_threshold = 0.01
-                elif sens_val >= 60: # Normal
-                    min_len = 2; threshold = 0.60; img_threshold = 0.04
-                elif sens_val >= 40: # Media Baja
-                    min_len = 3; threshold = 0.35; img_threshold = 0.10
-                else: # Baja (20)
-                    min_len = 6; threshold = 0.10; img_threshold = 0.25
+                # Mapeo de los 10 niveles de sensibilidad calibrados quirúrgicamente
+                # Formato: (largo_minimo, text_threshold, changed_pixels_threshold)
+                LEVELS = {
+                    10:  (7, 0.10, 600), # Nivel 1 (Mínima)
+                    20:  (6, 0.15, 400), # Nivel 2
+                    30:  (5, 0.25, 250), # Nivel 3
+                    40:  (4, 0.35, 120), # Nivel 4
+                    50:  (3, 0.50, 60),  # Nivel 5 (Medio)
+                    60:  (2, 0.65, 30),  # Nivel 6
+                    70:  (2, 0.75, 15),  # Nivel 7
+                    80:  (1, 0.85, 8),   # Nivel 8
+                    90:  (1, 0.95, 4),   # Nivel 9
+                    100: (1, 0.99, 2)    # Nivel 10 (Máxima)
+                }
+                
+                level_key = min(LEVELS.keys(), key=lambda k: abs(k - sens_val))
+                min_len, threshold, pixel_threshold = LEVELS[level_key]
 
                 if prev_small_img is not None:
-                    # Calculamos la diferencia absoluta
-                    diff = cv2.absdiff(small_img, prev_small_img)
-                    diff_score = np.mean(diff) / 255.0
+                    # Calculamos diferencia absoluta en escala de grises
+                    diff = cv2.absdiff(small_gray, prev_small_img)
+                    # Contamos cuántos píxeles cambiaron su brillo en más de 15 unidades
+                    changed_pixels = np.sum(diff > 15)
                     
-                    if diff_score < img_threshold:
+                    if changed_pixels < pixel_threshold:
                         elapsed = time.time() - loop_start
                         remaining = max(0.1, float(self.config.get("dynamic_interval", 1.0)) - elapsed)
                         time.sleep(remaining)
                         continue
                     else:
-                        # Si hubo un cambio visual real, reseteamos la memoria diferencial
+                        # Si hubo un cambio real en la pantalla, reseteamos la memoria diferencial
                         prev_elements_texts.clear()
                 
-                prev_small_img = small_img.copy()
+                prev_small_img = small_gray.copy()
 
                 with self._scan_lock: elements = self.ocr.scan_image(img)
                 self._last_elements = elements

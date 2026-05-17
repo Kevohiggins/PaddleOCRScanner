@@ -106,16 +106,67 @@ def apply_update(base_path, zip_path):
         bat_path = os.path.join(base_path, "apply_update.bat")
         exe_name = "PaddleOCR Scanner.exe"
         
-        # El archivo BAT usa robocopy para mover los archivos de forma robusta
+        # El archivo BAT espera pacientemente a que se cierre el ejecutable y aplica la actualización.
+        # Es inteligente: si detecta vestigios de la versión 1.4 (como la carpeta torch), hace limpieza total.
+        # Si ya está en la 1.5 Lite, hace una actualización liviana (robocopy directo), permitiendo zips futuros diminutos.
         bat_content = f"""@echo off
-timeout /t 5 /nobreak > nul
-rmdir /s /q "{os.path.join(base_path, '_internal', 'torch')}" > nul 2>&1
-rmdir /s /q "{os.path.join(base_path, '_internal', 'stanza')}" > nul 2>&1
-rmdir /s /q "{os.path.join(base_path, '_internal', 'argostranslate')}" > nul 2>&1
-rmdir /s /q "{os.path.join(base_path, 'models', 'argostranslate')}" > nul 2>&1
-robocopy "{source_dir}" "{base_path}" /E /MOVE /IS /IT /R:5 /W:1 > nul
-rmdir /s /q "{tmp_dir}"
-del "{zip_path}"
+set "EXE_NAME={exe_name}"
+
+:: 1. Esperar de forma segura a que el proceso principal se haya cerrado por completo
+:wait_loop
+tasklist /FI "IMAGENAME eq %EXE_NAME%" 2>NUL | find /I "%EXE_NAME%" >nul
+if %errorlevel% equ 0 (
+    timeout /t 1 /nobreak > nul
+    goto :wait_loop
+)
+timeout /t 2 /nobreak > nul
+
+:: 2. Detectar si venimos de la v1.4 (si existe la carpeta de torch en _internal)
+if exist "{base_path}\_internal\torch" (
+    :: --- MODO MIGRACIÓN 1.4 -> 1.5 (Destrucción y limpieza total) ---
+    
+    :: Crear directorio temporal para el salvavidas
+    mkdir "{base_path}\_update_backup" > nul 2>&1
+    mkdir "{base_path}\_update_backup\models" > nul 2>&1
+    
+    :: Mover config.json y modelos de OCR (v5_ov) a la zona segura
+    if exist "{base_path}\config.json" move /y "{base_path}\config.json" "{base_path}\_update_backup\" > nul 2>&1
+    if exist "{base_path}\_internal\models\v5_ov" move "{base_path}\_internal\models\v5_ov" "{base_path}\_update_backup\models\" > nul 2>&1
+    
+    :: Volar la carpeta _internal vieja entera con su giga de basura
+    rmdir /s /q "{base_path}\_internal" > nul 2>&1
+    
+    :: Borrar archivos viejos sueltos de la raíz excepto temporales
+    for %%i in ("{base_path}\*") do (
+        if not "%%~nxi"=="apply_update.bat" if not "%%~nxi"=="update.zip" del /q "%%i" > nul 2>&1
+    )
+    
+    :: Extraer los nuevos archivos de la v1.5 Lite
+    robocopy "{source_dir}" "{base_path}" /E /MOVE /IS /IT /R:5 /W:1 > nul
+    
+    :: Restaurar config.json a la raíz
+    if exist "{base_path}\_update_backup\config.json" move /y "{base_path}\_update_backup\config.json" "{base_path}\" > nul 2>&1
+    
+    :: Restaurar los modelos de OCR (v5_ov) a la nueva carpeta _internal\models\
+    if exist "{base_path}\_update_backup\models\v5_ov" (
+        rmdir /s /q "{base_path}\_internal\models\v5_ov" > nul 2>&1
+        mkdir "{base_path}\_internal\models" > nul 2>&1
+        move "{base_path}\_update_backup\models\v5_ov" "{base_path}\_internal\models\" > nul 2>&1
+    )
+    
+    :: Borrar backup temporal
+    rmdir /s /q "{base_path}\_update_backup" > nul 2>&1
+) else (
+    :: --- MODO ACTUALIZACIÓN LIVIANA 1.5+ -> 1.6+ (Sobre-escritura incremental) ---
+    :: Permite que los futuros Update.zip pesen solo unos pocos megas.
+    robocopy "{source_dir}" "{base_path}" /E /MOVE /IS /IT /R:5 /W:1 > nul
+)
+
+:: 3. Limpiar archivos temporales de la descarga
+rmdir /s /q "{tmp_dir}" > nul 2>&1
+del "{zip_path}" > nul 2>&1
+
+:: 4. Arrancar la nueva versión limpia
 start "" "{os.path.join(base_path, exe_name)}"
 del "%~f0"
 """

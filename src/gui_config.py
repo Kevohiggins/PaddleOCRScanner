@@ -257,7 +257,9 @@ class ConfigWindow(wx.Dialog):
         self.dyn_interval = self._add_spin(self.tab_dynamic, grid, "Intervalo de escaneo (décimas):", 1, 100, name="Intervalo")
         grid.Add(wx.StaticText(self.tab_dynamic, label="Sensibilidad al cambio:"), 0, wx.ALIGN_CENTER_VERTICAL)
         self.dyn_sens = wx.Choice(self.tab_dynamic, choices=[
-            "Baja", "Media Baja", "Normal", "Media Alta", "Alta"
+            "Nivel 1 (Mínima)", "Nivel 2", "Nivel 3", "Nivel 4",
+            "Nivel 5 (Medio)", "Nivel 6", "Nivel 7", "Nivel 8",
+            "Nivel 9", "Nivel 10 (Máxima)"
         ], name="Sensibilidad")
         grid.Add(self.dyn_sens, 1, wx.EXPAND)
         sizer.Add(grid, 1, wx.EXPAND | wx.ALL, 20)
@@ -458,11 +460,7 @@ class ConfigWindow(wx.Dialog):
         self.dyn_target.SetSelection(0 if c.get("dynamic_target", "screen") == "screen" else 1)
         self.dyn_interval.SetValue(int(c.get("dynamic_interval", 1.0) * 10))
         sens_val = int(c.get("dynamic_sensitivity", 50))
-        if sens_val <= 20: s_idx = 0
-        elif sens_val <= 40: s_idx = 1
-        elif sens_val <= 60: s_idx = 2
-        elif sens_val <= 80: s_idx = 3
-        else: s_idx = 4
+        s_idx = max(0, min(9, (sens_val // 10) - 1))
         self.dyn_sens.SetSelection(s_idx)
         self.dyn_diff.SetValue(c.get("dynamic_diff_mode", False))
         self.dyn_interrupt.SetValue(c.get("dynamic_interrupt", False))
@@ -502,7 +500,7 @@ class ConfigWindow(wx.Dialog):
         self.temp_config["auto_rescan_delay"] = self.auto_rescan_delay.GetValue()
         self.temp_config["dynamic_target"] = "screen" if self.dyn_target.GetSelection() == 0 else "window"
         self.temp_config["dynamic_interval"] = self.dyn_interval.GetValue() / 10.0
-        s_vals = [20, 40, 60, 80, 100]
+        s_vals = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
         self.temp_config["dynamic_sensitivity"] = s_vals[self.dyn_sens.GetSelection()]
         self.temp_config["dynamic_diff_mode"] = self.dyn_diff.GetValue()
         self.temp_config["dynamic_interrupt"] = self.dyn_interrupt.GetValue()
