@@ -125,6 +125,7 @@ class PaddleOCRScanner:
         self.hotkey_frame = None
         self._last_profile = "Global"
         self._last_elements = []
+        self.active_navigator = None
 
     def start(self):
         self.tts.play_startup()
@@ -311,9 +312,6 @@ class PaddleOCRScanner:
                         remaining = max(0.1, float(self.config.get("dynamic_interval", 1.0)) - elapsed)
                         time.sleep(remaining)
                         continue
-                    else:
-                        # Si hubo un cambio real en la pantalla, reseteamos la memoria diferencial
-                        prev_elements_texts.clear()
                 
                 prev_small_img = small_gray.copy()
 
@@ -395,11 +393,21 @@ class PaddleOCRScanner:
         # La traducción se hace dinámicamente en ElementNavigator._announce()
         # al navegar, para no retrasar el reporte inicial de resultados.
 
+        if self.active_navigator:
+            try: self.active_navigator._stop()
+            except: pass
+            self.active_navigator = None
+
         if elements:
             self.tts.play_scan_success()
             self.tts.speak(f"{len(elements)} resultados.", interrupt=True)
             nav = ElementNavigator(self.tts, self.config, ox, oy, rescan_callback=lambda: self._start_scan(mode))
-            nav.navigate(elements)
+            self.active_navigator = nav
+            try:
+                nav.navigate(elements)
+            finally:
+                if self.active_navigator == nav:
+                    self.active_navigator = None
         else: 
             self.tts.play_error(); self.tts.speak("No se detectó nada.", interrupt=True)
 
@@ -428,6 +436,9 @@ class PaddleOCRScanner:
 
     def _on_quit_hotkey(self):
         self._release_modifiers()
+        if self.active_navigator:
+            try: self.active_navigator._stop()
+            except: pass
         if self.app: wx.CallAfter(self.app.ExitMainLoop)
 
     def restart_app(self):

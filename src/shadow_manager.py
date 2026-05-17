@@ -60,8 +60,10 @@ class ShadowManager:
         
         count = 0
         for s in final_shadows:
-            if self.add_text_shadow(s.text): count += 1
-            self.add_region(s.x, s.y, s.w, s.h)
+            added_text = self.add_text_shadow(s.text)
+            added_region = self.add_region(s.x, s.y, s.w, s.h)
+            if added_text or added_region:
+                count += 1
         if count > 0: self.save()
         return count
 

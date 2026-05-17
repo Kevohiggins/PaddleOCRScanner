@@ -166,7 +166,10 @@ class OCREngine:
         
         if scale_factor != 1.0 and scale_factor > 0:
             new_w, new_h = int(original_w * scale_factor), int(original_h * scale_factor)
-            process_image = cv2.resize(image, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
+            if new_w > 0 and new_h > 0:
+                process_image = cv2.resize(image, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
+            else:
+                process_image = image
         else:
             process_image = image
 
@@ -240,7 +243,7 @@ class OCREngine:
         min_confidence = float(conf_val) if conf_val is not None else 0.3
         
         # TOLERANCIA DE FILAS (Píxeles para agrupar en la misma línea)
-        row_tolerance = int(self.config.get("row_tolerance", 20))
+        row_tolerance = max(1, int(self.config.get("row_tolerance", 20)))
 
         for detection in result:
             bbox = detection[0]       # [[x1,y1], [x2,y2], [x3,y3], [x4,y4]]

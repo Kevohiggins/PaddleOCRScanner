@@ -35,10 +35,15 @@ def capture_active_window() -> tuple[np.ndarray, int, int]:
         Los offsets corresponden a la posición de la ventana en pantalla.
     """
     hwnd = win32gui.GetForegroundWindow()
-    rect = win32gui.GetWindowRect(hwnd)
-    x, y, x2, y2 = rect
-    width = x2 - x
-    height = y2 - y
+    if not hwnd:
+        return capture_screen()
+    try:
+        rect = win32gui.GetWindowRect(hwnd)
+        x, y, x2, y2 = rect
+        width = x2 - x
+        height = y2 - y
+    except Exception:
+        return capture_screen()
 
     if width <= 0 or height <= 0:
         # Fallback a pantalla completa si la ventana tiene tamaño inválido

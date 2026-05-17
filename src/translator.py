@@ -166,7 +166,13 @@ class Translator:
                     continue
                 # Reemplazamos puntuación japonesa para usar un split común
                 normalized_line = line.replace('。', '.')
-                sentences = [s.strip() + '.' for s in normalized_line.split('.') if s.strip()]
+                raw_sentences = [s.strip() for s in normalized_line.split('.') if s.strip()]
+                sentences = []
+                for s in raw_sentences:
+                    if s[-1] in ('.', '?', '!', '。', '！', '？', '…'):
+                        sentences.append(s)
+                    else:
+                        sentences.append(s + '.')
                 
                 trans_sentences = []
                 for sentence in sentences:
