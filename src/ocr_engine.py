@@ -173,59 +173,49 @@ class OCREngine:
         else:
             process_image = image
 
-        original_was_bgr = len(process_image.shape) == 3 and process_image.shape[2] == 3
+        # Optimizamos: Convertimos a gris una sola vez si algún filtro lo necesita
+        needs_gray = any([
+            self.config.get("use_clahe", False),
+            self.config.get("use_binarization", False),
+            self.config.get("use_dilation", False)
+        ])
+        
+        gray_image = None
+        if needs_gray:
+            if len(process_image.shape) == 3:
+                gray_image = cv2.cvtColor(process_image, cv2.COLOR_BGR2GRAY)
+            else:
+                gray_image = process_image
 
-        # 1. Enfoque (Sharpening)
+        # 1. Enfoque (Sharpening) - Trabaja sobre color o gris
         if self.config.get("use_sharpening", False):
-            print("DEBUG: Aplicando Enfoque de bordes...")
             kernel = np.array([[-1,-1,-1], [-1,9,-1], [-1,-1,-1]])
             process_image = cv2.filter2D(process_image, -1, kernel)
-            print("DEBUG: Enfoque aplicado con éxito.")
+            if gray_image is not None: # Si ya teníamos gris, lo actualizamos tras el enfoque
+                if len(process_image.shape) == 3:
+                    gray_image = cv2.cvtColor(process_image, cv2.COLOR_BGR2GRAY)
+                else:
+                    gray_image = process_image
 
         # 2. Contraste (CLAHE)
-        if self.config.get("use_clahe", False):
-            print("DEBUG: Aplicando CLAHE...")
-            if original_was_bgr:
-                gray = cv2.cvtColor(process_image, cv2.COLOR_BGR2GRAY)
-            else:
-                gray = process_image
+        if self.config.get("use_clahe", False) and gray_image is not None:
             clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
-            cl = clahe.apply(gray)
-            if original_was_bgr:
-                process_image = cv2.cvtColor(cl, cv2.COLOR_GRAY2BGR)
-            else:
-                process_image = cl
-            print("DEBUG: CLAHE aplicado con éxito.")
+            gray_image = clahe.apply(gray_image)
 
         # 3. Binarización (Blanco y Negro)
-        if self.config.get("use_binarization", False):
-            print("DEBUG: Aplicando Binarización...")
-            if original_was_bgr:
-                gray = cv2.cvtColor(process_image, cv2.COLOR_BGR2GRAY)
-            else:
-                gray = process_image
-            # Usamos Binarización Adaptativa (Gaussian) para que se banque sombras desparejas
-            cl = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2)
-            if original_was_bgr:
-                process_image = cv2.cvtColor(cl, cv2.COLOR_GRAY2BGR)
-            else:
-                process_image = cl
-            print("DEBUG: Binarización aplicada con éxito.")
+        if self.config.get("use_binarization", False) and gray_image is not None:
+            gray_image = cv2.adaptiveThreshold(gray_image, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2)
 
         # 4. Dilatación (Engrosar letras)
-        if self.config.get("use_dilation", False):
-            print("DEBUG: Aplicando Dilatación...")
-            if original_was_bgr:
-                gray = cv2.cvtColor(process_image, cv2.COLOR_BGR2GRAY)
-            else:
-                gray = process_image
+        if self.config.get("use_dilation", False) and gray_image is not None:
             kernel = np.ones((2,2), np.uint8)
-            cl = cv2.dilate(gray, kernel, iterations=1)
-            if original_was_bgr:
-                process_image = cv2.cvtColor(cl, cv2.COLOR_GRAY2BGR)
-            else:
-                process_image = cl
-            print("DEBUG: Dilatación aplicada con éxito.")
+            gray_image = cv2.dilate(gray_image, kernel, iterations=1)
+
+        # Si usamos algún filtro que trabaje en gris, la imagen final de proceso es la gris
+        if gray_image is not None and (self.config.get("use_clahe") or self.config.get("use_binarization") or self.config.get("use_dilation")):
+            # RapidOCR prefiere 3 canales. Si es gris, la convertimos de vuelta a BGR (copiando canales)
+            # Esto es más eficiente que procesar color en cada paso anterior.
+            process_image = cv2.cvtColor(gray_image, cv2.COLOR_GRAY2BGR)
 
         result, elapse = self._ocr(process_image)
         

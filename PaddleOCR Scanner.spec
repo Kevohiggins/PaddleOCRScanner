@@ -44,7 +44,6 @@ a = Analysis(
     binaries=binaries,
     datas=datas,
     hiddenimports=[
-        'PIL.Image',           # Procesamiento de imágenes
         'rapidocr_openvino',    # Motor OCR
         'openvino.runtime',     # Aceleración Intel
         'ctranslate2',          # Motor de traducción Offline

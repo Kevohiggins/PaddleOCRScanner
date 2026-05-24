@@ -126,6 +126,8 @@ class PaddleOCRScanner:
         self._last_profile = "Global"
         self._last_elements = []
         self.active_navigator = None
+        self._last_hwnd = None
+        self._last_app_name = "Global"
 
     def start(self):
         self.tts.play_startup()
@@ -161,9 +163,27 @@ class PaddleOCRScanner:
         self.tts.play_shutdown(); time.sleep(1.0); sys.exit(0)
 
     def _get_current_app_name(self):
-        hwnd = win32gui.GetForegroundWindow(); _, pid = win32process.GetWindowThreadProcessId(hwnd)
-        try: import psutil; return psutil.Process(pid).name()
-        except: return "Global"
+        hwnd = win32gui.GetForegroundWindow()
+        if not hwnd:
+            return "Global"
+            
+        if hwnd == self._last_hwnd:
+            return self._last_app_name
+            
+        self._last_hwnd = hwnd
+        try: 
+            _, pid = win32process.GetWindowThreadProcessId(hwnd)
+            if pid == 0:
+                self._last_app_name = "Global"
+                return "Global"
+                
+            import psutil
+            name = psutil.Process(pid).name()
+            self._last_app_name = name
+            return name
+        except: 
+            self._last_app_name = "Global"
+            return "Global"
 
     def _update_profile(self):
         app_name = self._get_current_app_name(); self.shadow.set_app(app_name)

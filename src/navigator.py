@@ -54,37 +54,9 @@ class ElementNavigator:
         self.tts = tts; self.config = config; self.offset_x = offset_x; self.offset_y = offset_y
         self.rescan_callback = rescan_callback
         self.elements = []; self.index = -1; self._hook = None; self._running = False
+        self._hotkey_actions = {}
 
-    def navigate(self, elements):
-        if not elements: return
-        self.elements = elements; self.index = -1; self._running = True
-        self._callback = HOOKPROC(self._hook_callback)
-        self._hook = user32.SetWindowsHookExW(13, self._callback, kernel32.GetModuleHandleW(None), 0)
-        if not self._hook: self._hook = user32.SetWindowsHookExW(13, self._callback, None, 0)
-        msg = ctypes.wintypes.MSG()
-        while self._running and user32.GetMessageW(ctypes.byref(msg), 0, 0, 0) != 0:
-            user32.TranslateMessage(ctypes.byref(msg)); user32.DispatchMessageW(ctypes.byref(msg))
-
-    def _stop(self):
-        self._running = False
-        if self._hook: user32.UnhookWindowsHookEx(self._hook); self._hook = None
-        user32.PostQuitMessage(0)
-
-    def _get_current_mask(self):
-        mask = 0
-        if (win32api.GetKeyState(win32con.VK_SHIFT) & 0x8000): mask |= MOD_SHIFT
-        if (win32api.GetKeyState(win32con.VK_CONTROL) & 0x8000): mask |= MOD_CTRL
-        if (win32api.GetKeyState(win32con.VK_MENU) & 0x8000): mask |= MOD_ALT
-        return mask
-
-    def _hook_callback(self, nCode, wParam, lParam):
-        if nCode >= 0 and wParam == win32con.WM_KEYDOWN:
-            if self._handle_key(lParam.contents.vkCode): return 1
-        return user32.CallNextHookEx(self._hook, nCode, wParam, lParam)
-
-    def _handle_key(self, vk):
-        current_mask = self._get_current_mask()
-        
+    def _precompute_hotkeys(self):
         # Mapa de acciones basado en configuración
         actions = {
             "key_double": ("shift+enter", self._on_double),
@@ -100,10 +72,60 @@ class ElementNavigator:
             "key_skip_prev": ("left", lambda: self._on_skip(-5)),
             "key_repeat": ("space", self._on_repeat)
         }
-
+        
+        self._hotkey_actions = {}
         for cid, (default, func) in actions.items():
-            target_vk, target_mask = string_to_hotkey(self.config.get(cid, ""), default)
-            if vk == target_vk and current_mask == target_mask:
+            vk, mask = string_to_hotkey(self.config.get(cid, ""), default)
+            if vk != 0:
+                self._hotkey_actions[vk] = self._hotkey_actions.get(vk, [])
+                self._hotkey_actions[vk].append((mask, func))
+
+    def navigate(self, elements):
+        if not elements: return
+        self._precompute_hotkeys()
+        self.elements = elements; self.index = -1; self._running = True
+        self._callback = HOOKPROC(self._hook_callback)
+        self._hook = user32.SetWindowsHookExW(13, self._callback, kernel32.GetModuleHandleW(None), 0)
+        if not self._hook: self._hook = user32.SetWindowsHookExW(13, self._callback, None, 0)
+        
+        msg = ctypes.wintypes.MSG()
+        while self._running:
+            # PeekMessageW permite revisar la cola sin bloquearse infinitamente
+            # y sin depender exclusivamente de GetMessageW que puede tragarse WM_QUITs ajenos
+            if user32.PeekMessageW(ctypes.byref(msg), 0, 0, 0, 1): # 1 = PM_REMOVE
+                if msg.message == 0x0012: # WM_QUIT
+                    break
+                user32.TranslateMessage(ctypes.byref(msg))
+                user32.DispatchMessageW(ctypes.byref(msg))
+            else:
+                # Pequeña espera para no quemar CPU en el bucle de mensajes
+                time.sleep(0.01)
+
+    def _stop(self):
+        self._running = False
+        if self._hook: 
+            user32.UnhookWindowsHookEx(self._hook)
+            self._hook = None
+
+    def _get_current_mask(self):
+        mask = 0
+        if (win32api.GetKeyState(win32con.VK_SHIFT) & 0x8000): mask |= MOD_SHIFT
+        if (win32api.GetKeyState(win32con.VK_CONTROL) & 0x8000): mask |= MOD_CTRL
+        if (win32api.GetKeyState(win32con.VK_MENU) & 0x8000): mask |= MOD_ALT
+        return mask
+
+    def _hook_callback(self, nCode, wParam, lParam):
+        if nCode >= 0 and wParam == win32con.WM_KEYDOWN:
+            if self._handle_key(lParam.contents.vkCode): return 1
+        return user32.CallNextHookEx(self._hook, nCode, wParam, lParam)
+
+    def _handle_key(self, vk):
+        if vk not in self._hotkey_actions:
+            return False
+            
+        current_mask = self._get_current_mask()
+        for target_mask, func in self._hotkey_actions[vk]:
+            if current_mask == target_mask:
                 return func()
             
         return False
