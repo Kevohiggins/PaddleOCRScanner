@@ -14,4 +14,3 @@ ctranslate2
 sentencepiece
 pypiwin32
 pywin32
-pyttsx3
