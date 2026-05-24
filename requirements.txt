@@ -1,5 +1,4 @@
 mss
-Pillow
 keyboard
 pyperclip
 accessible-output2
