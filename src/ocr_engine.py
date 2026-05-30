@@ -173,49 +173,44 @@ class OCREngine:
         else:
             process_image = image
 
-        # Optimizamos: Convertimos a gris una sola vez si algún filtro lo necesita
-        needs_gray = any([
+# ---------------------------------------------------------
+        # PIPELINE DE MEJORAS OPTIMIZADO (Zero-Waste)
+        # ---------------------------------------------------------
+        has_improvements = any([
+            self.config.get("use_sharpening", False),
             self.config.get("use_clahe", False),
             self.config.get("use_binarization", False),
             self.config.get("use_dilation", False)
         ])
-        
-        gray_image = None
-        if needs_gray:
+
+        if has_improvements:
+            # 1. Pasamos a gris de entrada. Trabajar en 1 canal es 300% más rápido.
             if len(process_image.shape) == 3:
-                gray_image = cv2.cvtColor(process_image, cv2.COLOR_BGR2GRAY)
-            else:
-                gray_image = process_image
+                process_image = cv2.cvtColor(process_image, cv2.COLOR_BGR2GRAY)
 
-        # 1. Enfoque (Sharpening) - Trabaja sobre color o gris
-        if self.config.get("use_sharpening", False):
-            kernel = np.array([[-1,-1,-1], [-1,9,-1], [-1,-1,-1]])
-            process_image = cv2.filter2D(process_image, -1, kernel)
-            if gray_image is not None: # Si ya teníamos gris, lo actualizamos tras el enfoque
-                if len(process_image.shape) == 3:
-                    gray_image = cv2.cvtColor(process_image, cv2.COLOR_BGR2GRAY)
-                else:
-                    gray_image = process_image
+            # 2. Enfoque (Sharpening)
+            if self.config.get("use_sharpening", False):
+                kernel = np.array([[-1,-1,-1], [-1,9,-1], [-1,-1,-1]])
+                process_image = cv2.filter2D(process_image, -1, kernel)
 
-        # 2. Contraste (CLAHE)
-        if self.config.get("use_clahe", False) and gray_image is not None:
-            clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
-            gray_image = clahe.apply(gray_image)
+            # 3. Contraste (CLAHE)
+            if self.config.get("use_clahe", False):
+                clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
+                process_image = clahe.apply(process_image)
 
-        # 3. Binarización (Blanco y Negro)
-        if self.config.get("use_binarization", False) and gray_image is not None:
-            gray_image = cv2.adaptiveThreshold(gray_image, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2)
+            # 4. Binarización (Blanco y Negro puro)
+            if self.config.get("use_binarization", False):
+                process_image = cv2.adaptiveThreshold(process_image, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2)
 
-        # 4. Dilatación (Engrosar letras)
-        if self.config.get("use_dilation", False) and gray_image is not None:
-            kernel = np.ones((2,2), np.uint8)
-            gray_image = cv2.dilate(gray_image, kernel, iterations=1)
+            # 5. Engrosar letras (Dilatación)
+            if self.config.get("use_dilation", False):
+                kernel = np.ones((2,2), np.uint8)
+                process_image = cv2.dilate(process_image, kernel, iterations=1)
 
-        # Si usamos algún filtro que trabaje en gris, la imagen final de proceso es la gris
-        if gray_image is not None and (self.config.get("use_clahe") or self.config.get("use_binarization") or self.config.get("use_dilation")):
-            # RapidOCR prefiere 3 canales. Si es gris, la convertimos de vuelta a BGR (copiando canales)
-            # Esto es más eficiente que procesar color en cada paso anterior.
-            process_image = cv2.cvtColor(gray_image, cv2.COLOR_GRAY2BGR)
+            # 6. Devolver a 3 canales falsos (RapidOCR exige array 3D)
+            if len(process_image.shape) == 2:
+                process_image = cv2.cvtColor(process_image, cv2.COLOR_GRAY2BGR)
+        # ---------------------------------------------------------
 
         result, elapse = self._ocr(process_image)
         

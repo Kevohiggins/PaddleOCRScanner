@@ -1,17 +1,9 @@
-"""
-Captura de pantalla invisible usando mss.
-Soporta pantalla completa y ventana activa.
-Optimizado para rendimiento y seguridad de hilos mediante threading.local.
-"""
-
 import numpy as np
 import mss
 import win32gui
 import threading
+import cv2  # ¡Añadimos OpenCV acá!
 
-# Almacén local de hilos para mantener instancias de mss persistentes por hilo
-# Esto ahorra batería en el hilo dinámico (reutiliza instancia)
-# y da estabilidad en hilos de escaneo estático (instancias aisladas).
 _thread_local = threading.local()
 
 def get_sct():
@@ -20,24 +12,20 @@ def get_sct():
     return _thread_local.sct
 
 def capture_screen(monitor_index: int = 1) -> tuple[np.ndarray, int, int]:
-    """
-    Captura la pantalla completa del monitor indicado de forma eficiente y segura.
-    """
     sct = get_sct()
     monitor = sct.monitors[monitor_index]
     screenshot = sct.grab(monitor)
     
-    # Conversión eficiente de BGRA a RGB
-    img = np.array(screenshot, dtype=np.uint8)[:, :, :3]
-    img = img[:, :, ::-1] # BGR to RGB
+    # 1. CERO COPIAS: Leemos la memoria RAM cruda (instantáneo)
+    img_bgra = np.frombuffer(screenshot.bgra, dtype=np.uint8).reshape((monitor["height"], monitor["width"], 4))
+    
+    # 2. Extraemos los 3 colores (BGR) usando C++ ultra optimizado
+    # ¡No lo pasamos a RGB! A OpenCV y RapidOCR les gusta el BGR.
+    img = cv2.cvtColor(img_bgra, cv2.COLOR_BGRA2BGR)
     
     return img, monitor["left"], monitor["top"]
 
-
 def capture_active_window() -> tuple[np.ndarray, int, int]:
-    """
-    Captura solo la ventana activa (foreground window) de forma segura.
-    """
     hwnd = win32gui.GetForegroundWindow()
     if not hwnd:
         return capture_screen()
@@ -56,8 +44,10 @@ def capture_active_window() -> tuple[np.ndarray, int, int]:
     region = {"left": x, "top": y, "width": width, "height": height}
     screenshot = sct.grab(region)
     
-    # Convertir a RGB eficiente
-    img = np.array(screenshot, dtype=np.uint8)[:, :, :3]
-    img = img[:, :, ::-1] # BGR to RGB
+    # 1. CERO COPIAS
+    img_bgra = np.frombuffer(screenshot.bgra, dtype=np.uint8).reshape((height, width, 4))
+    
+    # 2. Extracción a BGR
+    img = cv2.cvtColor(img_bgra, cv2.COLOR_BGRA2BGR)
     
     return img, x, y

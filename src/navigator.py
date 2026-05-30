@@ -13,6 +13,7 @@ kernel32 = ctypes.windll.kernel32
 LRESULT = ctypes.c_longlong
 if ctypes.sizeof(ctypes.c_void_p) == 4: LRESULT = ctypes.c_long
 
+# --- ESTRUCTURAS DE BAJO NIVEL PARA EL TECLADO ---
 class KBDLLHOOKSTRUCT(ctypes.Structure):
     _fields_ = [
         ("vkCode", ctypes.wintypes.DWORD),
@@ -23,6 +24,23 @@ class KBDLLHOOKSTRUCT(ctypes.Structure):
     ]
 
 HOOKPROC = ctypes.WINFUNCTYPE(LRESULT, ctypes.c_int, ctypes.wintypes.WPARAM, ctypes.POINTER(KBDLLHOOKSTRUCT))
+
+# --- ESTRUCTURAS DE BAJO NIVEL PARA EL MOUSE (SENDINPUT) ---
+PUL = ctypes.POINTER(ctypes.c_ulong)
+class MouseInput(ctypes.Structure):
+    _fields_ = [("dx", ctypes.c_long), ("dy", ctypes.c_long), ("mouseData", ctypes.c_ulong),
+                ("dwFlags", ctypes.c_ulong), ("time", ctypes.c_ulong), ("dwExtraInfo", PUL)]
+class Input_I(ctypes.Union):
+    _fields_ = [("mi", MouseInput)]
+class Input(ctypes.Structure):
+    _fields_ = [("type", ctypes.c_ulong), ("ii", Input_I)]
+
+# Constantes de hardware para Mouse
+INPUT_MOUSE = 0
+MOUSEEVENTF_LEFTDOWN = 0x0002
+MOUSEEVENTF_LEFTUP = 0x0004
+MOUSEEVENTF_RIGHTDOWN = 0x0008
+MOUSEEVENTF_RIGHTUP = 0x0010
 
 SPECIAL_VK = {
     "enter": 0x0D, "esc": 0x1B, "space": 0x20, "tab": 0x09, "backspace": 0x08,
@@ -196,16 +214,47 @@ class ElementNavigator:
     def _click(self, mode):
         if 0 <= self.index < len(self.elements):
             el = self.elements[self.index]
-            win32api.SetCursorPos((int(self.offset_x + el.center_x), int(self.offset_y + el.center_y)))
-            time.sleep(0.05); m_text = "izquierdo"
+            
+            # 1. Movemos el mouse físicamente a la coordenada
+            abs_x = int(self.offset_x + el.center_x)
+            abs_y = int(self.offset_y + el.center_y)
+            user32.SetCursorPos(abs_x, abs_y)
+            
+            time.sleep(0.05) # Pausa micro para que el OS registre el movimiento
+            
+            # 2. Función interna para inyectar click de hardware
+            def send_click(down_flag, up_flag):
+                extra = ctypes.pointer(ctypes.c_ulong(0))
+                
+                # Presionar
+                ii_down = Input_I()
+                ii_down.mi = MouseInput(0, 0, 0, down_flag, 0, extra)
+                cmd_down = Input(INPUT_MOUSE, ii_down)
+                user32.SendInput(1, ctypes.byref(cmd_down), ctypes.sizeof(Input))
+                
+                time.sleep(0.02) # El humano más rápido del mundo tarda 20ms en soltar un click
+                
+                # Soltar
+                ii_up = Input_I()
+                ii_up.mi = MouseInput(0, 0, 0, up_flag, 0, extra)
+                cmd_up = Input(INPUT_MOUSE, ii_up)
+                user32.SendInput(1, ctypes.byref(cmd_up), ctypes.sizeof(Input))
+
+            # 3. Ejecutar según el modo
+            m_text = "izquierdo"
             if mode == "left":
-                win32api.mouse_event(win32con.MOUSEEVENTF_LEFTDOWN, 0, 0); win32api.mouse_event(win32con.MOUSEEVENTF_LEFTUP, 0, 0)
+                send_click(MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP)
             elif mode == "double":
-                m_text = "doble"; win32api.mouse_event(win32con.MOUSEEVENTF_LEFTDOWN, 0, 0); win32api.mouse_event(win32con.MOUSEEVENTF_LEFTUP, 0, 0)
-                time.sleep(0.05); win32api.mouse_event(win32con.MOUSEEVENTF_LEFTDOWN, 0, 0); win32api.mouse_event(win32con.MOUSEEVENTF_LEFTUP, 0, 0)
+                m_text = "doble"
+                send_click(MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP)
+                time.sleep(0.05)
+                send_click(MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP)
             elif mode == "right":
-                m_text = "derecho"; win32api.mouse_event(win32con.MOUSEEVENTF_RIGHTDOWN, 0, 0); win32api.mouse_event(win32con.MOUSEEVENTF_RIGHTUP, 0, 0)
-            self.tts.speak(f"Click {m_text}"); self._stop()
+                m_text = "derecho"
+                send_click(MOUSEEVENTF_RIGHTDOWN, MOUSEEVENTF_RIGHTUP)
+
+            self.tts.speak(f"Click {m_text}")
+            self._stop()
             
             # Auto-rescan logic
             if self.config.get("auto_rescan_after_click", False) and self.rescan_callback:

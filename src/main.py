@@ -5,6 +5,10 @@
 import ctypes
 import logging
 import os
+# Obligar a OpenVINO/OpenMP/MKL a usar un máximo de 2 a 4 hilos
+os.environ["OMP_NUM_THREADS"] = "2"
+os.environ["OPENBLAS_NUM_THREADS"] = "2"
+os.environ["MKL_NUM_THREADS"] = "2"
 import sys
 import threading
 import time
@@ -13,6 +17,7 @@ import win32gui
 import win32con
 import win32api
 import win32process
+import psutil  # Importado al principio para evitar lag dinámico
 from difflib import SequenceMatcher
 
 from config import load_config, save_config, CONFIG_FILE, get_effective_config, get_base_path, VERSION
@@ -128,6 +133,7 @@ class PaddleOCRScanner:
         self.active_navigator = None
         self._last_hwnd = None
         self._last_app_name = "Global"
+        self._last_processed_app = None  # Carga inicial del rastreador de apps
 
     def start(self):
         self.tts.play_startup()
@@ -177,7 +183,6 @@ class PaddleOCRScanner:
                 self._last_app_name = "Global"
                 return "Global"
                 
-            import psutil
             name = psutil.Process(pid).name()
             self._last_app_name = name
             return name
@@ -186,7 +191,14 @@ class PaddleOCRScanner:
             return "Global"
 
     def _update_profile(self):
-        app_name = self._get_current_app_name(); self.shadow.set_app(app_name)
+        app_name = self._get_current_app_name()
+        
+        # OPTIMIZACIÓN CRUCIAL: Si la ventana activa no cambió, salimos de inmediato
+        if app_name == self._last_processed_app:
+            return
+            
+        self._last_processed_app = app_name
+        self.shadow.set_app(app_name)
         new_config = get_effective_config(self.full_config, app_name)
         
         needs_reinit = (
@@ -285,7 +297,6 @@ class PaddleOCRScanner:
             threading.Thread(target=self._dynamic_scan_loop, daemon=True).start()
 
     def _dynamic_scan_loop(self):
-        import cv2
         prev_text = ""
         prev_elements_texts = set()
         prev_small_img = None
@@ -299,9 +310,9 @@ class PaddleOCRScanner:
                 # Atajo rápido: Comparación visual de píxeles activos en grises con OpenCV
                 sens_val = int(self.config.get("dynamic_sensitivity", 50))
                 
-                # Miniatura reducida y convertida a escala de grises para eliminar ruido de color
-                small_img = cv2.resize(img, (128, 128))
-                small_gray = cv2.cvtColor(small_img, cv2.COLOR_BGR2GRAY)
+                # OPTIMIZACIÓN: Miniatura rápida usando INTER_NEAREST y extracción de canal verde en memoria
+                small_img = cv2.resize(img, (128, 128), interpolation=cv2.INTER_NEAREST)
+                small_gray = small_img[:, :, 1]
                 
                 # Mapeo de los 10 niveles de sensibilidad calibrados quirúrgicamente
                 # Formato: (largo_minimo, text_threshold, changed_pixels_threshold)
@@ -410,9 +421,6 @@ class PaddleOCRScanner:
                 self.tts.speak("Error en el escaneo.")
                 return
 
-        # La traducción se hace dinámicamente en ElementNavigator._announce()
-        # al navegar, para no retrasar el reporte inicial de resultados.
-
         if self.active_navigator:
             try: self.active_navigator._stop()
             except: pass
@@ -441,7 +449,11 @@ class PaddleOCRScanner:
             old_trans = self.config.get("translate_enabled", False)
             self.full_config = res
             self.shadow.load()
+            
+            # Forzar actualización inmediata de perfil ya que se modificaron ajustes
+            self._last_processed_app = None
             self._update_profile()
+            
             new_trans = self.config.get("translate_enabled", False)
             
             msg = "Guardado."
@@ -462,7 +474,6 @@ class PaddleOCRScanner:
         if self.app: wx.CallAfter(self.app.ExitMainLoop)
 
     def restart_app(self):
-        import sys
         import subprocess
         self.is_dynamic_running = False
         executable = sys.executable
@@ -470,7 +481,35 @@ class PaddleOCRScanner:
         subprocess.Popen([executable] + args)
         os._exit(0)
 
+def check_single_instance():
+    current_pid = os.getpid()
+    try:
+        me = psutil.Process(current_pid)
+        for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+            if proc.info['pid'] == current_pid: continue
+            if proc.info['name'] == me.name():
+                if me.name().lower() in ("python.exe", "pythonw.exe"):
+                    if proc.info['cmdline'] and len(proc.info['cmdline']) > 1 and len(sys.argv) > 1:
+                        if os.path.basename(proc.info['cmdline'][1]) == os.path.basename(sys.argv[0]):
+                            return True
+                else:
+                    return True
+    except: pass
+    return False
+
 def main():
+    if check_single_instance():
+        return
+
+    # Soporte DPI completo al arrancar para evitar desfases de clicks y capturas
+    try:
+        ctypes.windll.shcore.SetProcessDpiAwareness(2)
+    except Exception:
+        try:
+            ctypes.windll.user32.SetProcessDPIAware()
+        except Exception:
+            pass
+
     if not ctypes.windll.shell32.IsUserAnAdmin():
         ctypes.windll.shell32.ShellExecuteW(None, "runas", sys.executable, f'"{os.path.abspath(sys.argv[0])}"', None, 1)
     else: PaddleOCRScanner().start()
