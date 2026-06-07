@@ -5,8 +5,8 @@ import glob
 from PyInstaller.utils.hooks import collect_data_files, collect_dynamic_libs
 
 # --- CONFIGURACIÓN DE RUTAS ---
-# Determinamos la ruta del entorno virtual para buscar las DLLs necesarias
-VENV_SP = os.path.join('.venv', 'Lib', 'site-packages')
+# Usamos sys.prefix para detectar de forma dinámica y universal tu entorno virtual activo
+VENV_SP = os.path.join(sys.prefix, 'Lib', 'site-packages')
 
 # 1. DATOS (Archivos no ejecutables que el programa necesita)
 datas = [

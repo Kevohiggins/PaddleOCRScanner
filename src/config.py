@@ -10,7 +10,7 @@ def get_base_path():
     return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 CONFIG_FILE = os.path.join(get_base_path(), "config.json")
-VERSION = "1.6"
+VERSION = "1.7"
 
 DEFAULT_CONFIG = {
     "global": {
@@ -41,7 +41,10 @@ DEFAULT_CONFIG = {
         "key_exit": "esc",
         "translate_enabled": False,
         "translate_to": "es",
-        "translate_from": "auto",
+        "translate_from": "en",
+        "translate_type": "disabled",
+        "translate_service": "google",
+        "translate_swap": False,
         "hotkey_shadow_learn": "ctrl+alt+l",
         "hotkey_shadow_clear": "ctrl+alt+r",
         "hotkey_shadow_toggle": "ctrl+alt+u",

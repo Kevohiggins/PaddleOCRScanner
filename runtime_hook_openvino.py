@@ -11,7 +11,12 @@ import glob
 if sys.platform == "win32":
     # Evitar conflictos de librerías de hilos (OpenMP)
     os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
-    os.environ["OMP_NUM_THREADS"] = "1"
+    
+    # NUEVO: Seteamos el límite de hilos óptimo desde el hook de arranque 
+    # para que las librerías carguen ya limitadas desde el milisegundo cero.
+    os.environ["OMP_NUM_THREADS"] = "2"
+    os.environ["OPENBLAS_NUM_THREADS"] = "2"
+    os.environ["MKL_NUM_THREADS"] = "2"
     
     base = getattr(sys, '_MEIPASS', os.path.dirname(os.path.abspath(__file__)))
     
