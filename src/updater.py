@@ -5,9 +5,21 @@ import sys
 import threading
 import wx
 import subprocess
+import re  # Importado para la extracción segura de versiones
 from config import VERSION
 
 REPO = "kevohiggins/PaddleOCRScanner"
+
+def parse_version(v):
+    """
+    Extrae los componentes numéricos principales de la versión (Major, Minor, Patch).
+    Aísla los números ignorando prefijos o sufijos como 'v', '-rc2' o '-beta'.
+    """
+    digits = re.findall(r'\d+', v)
+    parts = [int(x) for x in digits[:3]]
+    while len(parts) < 3:
+        parts.append(0)
+    return parts
 
 def check_updates_async(parent, silent=False):
     def run():
@@ -16,14 +28,8 @@ def check_updates_async(parent, silent=False):
             req = urllib.request.Request(url, headers={'User-Agent': 'PaddleOCRScanner-Updater'})
             with urllib.request.urlopen(req) as response:
                 data = json.loads(response.read().decode())
-                # Nos quedamos solo con los números y los puntos, ignorando cualquier letra
-                latest_tag = "".join([c for c in data.get("tag_name", "") if c.isdigit() or c == '.'])
-                
-                def parse_version(v):
-                    parts = [int(x) for x in v.split('.') if x.isdigit()]
-                    while len(parts) < 3:
-                        parts.append(0)
-                    return parts
+                # Pasamos el tag crudo directo de GitHub, la limpieza la hace parse_version
+                latest_tag = data.get("tag_name", "")
                 
                 if parse_version(latest_tag) > parse_version(VERSION):
                     wx.CallAfter(show_update_dialog, parent, data)
@@ -80,24 +86,25 @@ def download_update(parent, data):
                             percent = int(downloaded * 100 / total_size)
                             wx.CallAfter(prog.Update, percent, f"Descargando: {percent}%")
                             
-                wx.CallAfter(prog.Destroy)
-                wx.CallAfter(apply_update, base_path, zip_path)
+            # Extracción en hilo secundario para mantener la interfaz respondiendo sin cuelgues
+            wx.CallAfter(prog.Update, 100, "Extrayendo archivos de actualización...")
+            import zipfile
+            tmp_dir = os.path.join(base_path, "update_tmp")
+            
+            with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+                zip_ref.extractall(tmp_dir)
+                
+            wx.CallAfter(prog.Destroy)
+            wx.CallAfter(apply_update, base_path, zip_path, tmp_dir)
         except Exception as e:
             wx.CallAfter(prog.Destroy)
-            wx.CallAfter(wx.MessageBox, f"Error al descargar: {e}", "Error")
+            wx.CallAfter(wx.MessageBox, f"Error al descargar o extraer: {e}", "Error")
             
     threading.Thread(target=run, daemon=True).start()
 
-def apply_update(base_path, zip_path):
-    import zipfile
-    tmp_dir = os.path.join(base_path, "update_tmp")
-    
+def apply_update(base_path, zip_path, tmp_dir):
     try:
-        # Extraer en python
-        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-            zip_ref.extractall(tmp_dir)
-            
-        # Detectar si hay una carpeta raíz en el zip
+        # Detectar si los archivos vienen envueltos en una subcarpeta interna dentro del zip
         items = os.listdir(tmp_dir)
         source_dir = tmp_dir
         if len(items) == 1 and os.path.isdir(os.path.join(tmp_dir, items[0])):
@@ -106,9 +113,9 @@ def apply_update(base_path, zip_path):
         bat_path = os.path.join(base_path, "apply_update.bat")
         exe_name = "PaddleOCR Scanner.exe"
         
-        # El archivo BAT espera pacientemente a que se cierre el ejecutable y aplica la actualización.
-        # Es liviano y veloz: robocopy directo y limpieza de temporales.
+        # El comando 'chcp 65001' fuerza el modo UTF-8 para evitar errores con tildes o espacios en las rutas
         bat_content = f"""@echo off
+chcp 65001 > nul
 set "EXE_NAME={exe_name}"
 
 :: 1. Esperar de forma segura a que el proceso principal se haya cerrado por completo
@@ -136,6 +143,6 @@ del "%~f0"
             f.write(bat_content)
             
         subprocess.Popen([bat_path], shell=True)
-        wx.CallAfter(wx.GetApp().ExitMainLoop)
+        wx.GetApp().ExitMainLoop()
     except Exception as e:
         wx.MessageBox(f"Error al aplicar la actualización: {e}", "Error")
