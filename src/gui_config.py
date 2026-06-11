@@ -153,7 +153,10 @@ class ConfigWindow(wx.Dialog):
             if not translator_instance._initialized and not translator_instance._initializing:
                 translator_instance.ensure_initialized()
                 def safe_update():
-                    if self: self.update_trans_ui()
+                    try:
+                        if self and bool(self): self.update_trans_ui()
+                    except RuntimeError:
+                        pass
                 wx.CallLater(2000, safe_update)
         event.Skip()
         
@@ -201,8 +204,10 @@ class ConfigWindow(wx.Dialog):
         self.shadow_burst = self._add_spin(self.tab_ocr, grid, "Fotos para aprendizaje del modo sombra (2-15):", 2, 15)
         grid.Add(wx.StaticText(self.tab_ocr, label="Escala de imagen:"), 0, wx.ALIGN_CENTER_VERTICAL)
         self.scale_choice = wx.Choice(self.tab_ocr, choices=[
-            "Baja: La más rápida (35%)", "Media: Muy rápida (50%)", "Alta: Rápido y preciso (75%)",
-            "Nativa: Normal (100%)", "Ultra: Recomendada para textos diminutos (200%)"
+            "Baja: Muy rápida (40%)", "Media-Baja: Rápida y fluida (50%)", "Media: Equilibrada (60%)",
+            "Media-Alta: Rápida y precisa (75%)", "Alta: Precisión mejorada (90%)",
+            "Nativa: Normal (100%)", "Muy Alta: Para pantallas de alta densidad (150%)",
+            "Ultra: Para fuentes minúsculas (200%)"
         ], name="Escala de imagen")
         grid.Add(self.scale_choice, 1, wx.EXPAND)
         
@@ -444,8 +449,11 @@ class ConfigWindow(wx.Dialog):
         self.device_choice.SetSelection(d_idx)
         self.auto_update_cb.SetValue(c.get("auto_check_updates", True))
         for kid in self.PRO_NAMES: getattr(self, f"btn_{kid}").SetLabel(f"{self.PRO_NAMES[kid]}: {c.get(kid, defs.get(kid, 'Sin asignar'))}")
-        self.min_conf.SetValue(int(c.get("min_confidence", 0.5) * 100)); s_map = {0.35:0, 0.5:1, 0.75:2, 1.0:3, 2.0:4}
-        self.scale_choice.SetSelection(s_map.get(c.get("image_scale", 1.0), 3))
+        self.min_conf.SetValue(int(c.get("min_confidence", 0.5) * 100))
+        s_vals = [0.4, 0.5, 0.6, 0.75, 0.9, 1.0, 1.5, 2.0]
+        current_scale = float(c.get("image_scale", 1.0))
+        s_idx = min(range(len(s_vals)), key=lambda i: abs(s_vals[i] - current_scale))
+        self.scale_choice.SetSelection(s_idx)
         self.crop_t.SetValue(int(c.get("crop_top", 0))); self.crop_b.SetValue(int(c.get("crop_bottom", 0)))
         self.crop_l.SetValue(int(c.get("crop_left", 0))); self.crop_r.SetValue(int(c.get("crop_right", 0)))
         self.row_tol.SetValue(int(c.get("row_tolerance", 20)))
@@ -486,7 +494,7 @@ class ConfigWindow(wx.Dialog):
         self.temp_config["openvino_device"] = d_map.get(self.device_choice.GetSelection(), "AUTO")
         self.temp_config["auto_check_updates"] = self.auto_update_cb.GetValue()
         self.temp_config["min_confidence"] = self.min_conf.GetValue() / 100.0
-        s_vals = [0.35, 0.5, 0.75, 1.0, 2.0]; self.temp_config["image_scale"] = s_vals[self.scale_choice.GetSelection()]
+        s_vals = [0.4, 0.5, 0.6, 0.75, 0.9, 1.0, 1.5, 2.0]; self.temp_config["image_scale"] = s_vals[self.scale_choice.GetSelection()]
         self.temp_config["crop_top"] = self.crop_t.GetValue(); self.temp_config["crop_bottom"] = self.crop_b.GetValue()
         self.temp_config["crop_left"] = self.crop_l.GetValue(); self.temp_config["crop_right"] = self.crop_r.GetValue()
         self.temp_config["row_tolerance"] = self.row_tol.GetValue()

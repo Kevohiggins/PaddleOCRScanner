@@ -10,7 +10,7 @@ def get_base_path():
     return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 CONFIG_FILE = os.path.join(get_base_path(), "config.json")
-VERSION = "1.7"
+VERSION = "1.8"
 
 DEFAULT_CONFIG = {
     "global": {
@@ -33,6 +33,7 @@ DEFAULT_CONFIG = {
         "crop_right": 0,
         "dynamic_sensitivity": 50,
         "dynamic_diff_mode": False,
+        "dynamic_interrupt": False,
         "key_next": "down",
         "key_prev": "up",
         "key_click": "enter",

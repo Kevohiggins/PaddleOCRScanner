@@ -26,7 +26,7 @@ def check_updates_async(parent, silent=False):
         url = f"https://api.github.com/repos/{REPO}/releases/latest"
         try:
             req = urllib.request.Request(url, headers={'User-Agent': 'PaddleOCRScanner-Updater'})
-            with urllib.request.urlopen(req) as response:
+            with urllib.request.urlopen(req, timeout=10) as response:
                 data = json.loads(response.read().decode())
                 # Pasamos el tag crudo directo de GitHub, la limpieza la hace parse_version
                 latest_tag = data.get("tag_name", "")
@@ -66,7 +66,7 @@ def download_update(parent, data):
     def run():
         try:
             req = urllib.request.Request(url, headers={'User-Agent': 'PaddleOCRScanner-Updater'})
-            with urllib.request.urlopen(req) as response:
+            with urllib.request.urlopen(req, timeout=30) as response:
                 total_size = int(response.headers.get('content-length', 0))
                 downloaded = 0
                 chunk_size = 8192

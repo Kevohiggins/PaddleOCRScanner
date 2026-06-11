@@ -17,7 +17,6 @@ import win32gui
 import win32con
 import win32api
 import win32process
-import psutil  # Importado al principio para evitar lag dinámico
 from difflib import SequenceMatcher
 
 from config import load_config, save_config, CONFIG_FILE, get_effective_config, get_base_path, VERSION
@@ -183,13 +182,22 @@ class PaddleOCRScanner:
             if pid == 0:
                 self._last_app_name = "Global"
                 return "Global"
-                
-            name = psutil.Process(pid).name()
-            self._last_app_name = name
-            return name
+            
+            # 0x1000 es PROCESS_QUERY_LIMITED_INFORMATION
+            h_process = win32api.OpenProcess(0x1000, False, pid)
+            if h_process:
+                try:
+                    path = win32process.GetModuleFileNameEx(h_process, 0)
+                    name = os.path.basename(path)
+                    self._last_app_name = name
+                    return name
+                finally:
+                    win32api.CloseHandle(h_process)
         except: 
-            self._last_app_name = "Global"
-            return "Global"
+            pass
+            
+        self._last_app_name = "Global"
+        return "Global"
 
     def _update_profile(self):
         app_name = self._get_current_app_name()
@@ -507,19 +515,11 @@ class PaddleOCRScanner:
         if self.app: wx.CallAfter(self.app.ExitMainLoop)
 
 def check_single_instance():
-    current_pid = os.getpid()
-    try:
-        me = psutil.Process(current_pid)
-        for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
-            if proc.info['pid'] == current_pid: continue
-            if proc.info['name'] == me.name():
-                if me.name().lower() in ("python.exe", "pythonw.exe"):
-                    if proc.info['cmdline'] and len(proc.info['cmdline']) > 1 and len(sys.argv) > 1:
-                        if os.path.basename(proc.info['cmdline'][1]) == os.path.basename(sys.argv[0]):
-                            return True
-                else:
-                    return True
-    except: pass
+    ERROR_ALREADY_EXISTS = 183
+    global _app_mutex
+    _app_mutex = ctypes.windll.kernel32.CreateMutexW(None, True, "Global\\PaddleOCRScanner_UniqueMutex")
+    if ctypes.windll.kernel32.GetLastError() == ERROR_ALREADY_EXISTS:
+        return True
     return False
 
 def main():

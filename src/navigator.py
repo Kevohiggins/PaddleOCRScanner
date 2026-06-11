@@ -106,6 +106,9 @@ class ElementNavigator:
         self._hook = user32.SetWindowsHookExW(13, self._callback, kernel32.GetModuleHandleW(None), 0)
         if not self._hook: self._hook = user32.SetWindowsHookExW(13, self._callback, None, 0)
         
+        # Auto-anunciar el primer elemento para confirmar que la navegación inició
+        self._on_next()
+
         msg = ctypes.wintypes.MSG()
         while self._running:
             # PeekMessageW permite revisar la cola sin bloquearse infinitamente
