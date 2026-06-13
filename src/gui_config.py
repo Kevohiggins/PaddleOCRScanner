@@ -72,7 +72,9 @@ class ConfigWindow(wx.Dialog):
         "key_copy": "Copiar Resultado", "key_first": "Primer Resultado",
         "key_last": "Último Resultado", "key_skip_next": "Avanzar 5 Resultados",
         "key_skip_prev": "Retroceder 5 Resultados", "key_repeat": "Repetir/Deletrear",
-        "hotkey_manual": "Abrir Manual", "hotkey_toggle_auto_rescan": "Alternar Reescaneo"
+        "key_word_next": "Palabra Siguiente", "key_word_prev": "Palabra Anterior",
+        "hotkey_manual": "Abrir Manual", "hotkey_toggle_auto_rescan": "Alternar Reescaneo",
+        "hotkey_pdf": "Transcriptor/Traductor de Documentos"
     }
 
     def __init__(self, parent, full_config, current_profile="Global", active_app=""):
@@ -188,9 +190,9 @@ class ConfigWindow(wx.Dialog):
         self.key_sizer = wx.BoxSizer(wx.VERTICAL)
         ids = ["hotkey_screen", "hotkey_window", "hotkey_config", "hotkey_quit", "hotkey_dynamic", 
                "hotkey_shadow_learn", "hotkey_shadow_clear", "hotkey_shadow_toggle",
-               "key_first", "key_skip_prev", "key_prev", "key_next", "key_skip_next", "key_last", 
+               "key_first", "key_skip_prev", "key_prev", "key_word_prev", "key_word_next", "key_next", "key_skip_next", "key_last", 
                "key_copy", "key_repeat", "key_click", "key_double", "key_right", "key_exit",
-               "hotkey_manual", "hotkey_toggle_auto_rescan"]
+               "hotkey_manual", "hotkey_toggle_auto_rescan", "hotkey_pdf"]
         for kid in ids:
             btn = wx.Button(self.tab_keys, label=f"{self.PRO_NAMES[kid]}: ...", name=kid)
             btn.Bind(wx.EVT_BUTTON, self.on_capture)
@@ -311,6 +313,13 @@ class ConfigWindow(wx.Dialog):
         # Nuevo: Intercambio Inteligente
         self.trans_swap = wx.CheckBox(self.tab_trans, label="Intercambio Inteligente (Detectar idioma y traducir al opuesto)")
         sizer.Add(self.trans_swap, 0, wx.ALL, 15)
+        
+        # Nuevo: Paralelización
+        para_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        para_sizer.Add(wx.StaticText(self.tab_trans, label="Páginas a traducir en paralelo (Transcriptor):"), 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 10)
+        self.trans_parallel = wx.SpinCtrl(self.tab_trans, min=1, max=30)
+        para_sizer.Add(self.trans_parallel, 0, wx.EXPAND)
+        sizer.Add(para_sizer, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 15)
         
         self.trans_status = wx.StaticText(self.tab_trans, label="Estado: Listo")
         sizer.Add(self.trans_status, 0, wx.LEFT, 15)
@@ -484,6 +493,7 @@ class ConfigWindow(wx.Dialog):
         service = c.get("translate_service", "google")
         self.trans_service.SetStringSelection(service)
         self.trans_swap.SetValue(c.get("translate_swap", False))
+        self.trans_parallel.SetValue(int(c.get("translate_parallel_pages", 5)))
         
         self.update_trans_ui()
 
@@ -520,6 +530,7 @@ class ConfigWindow(wx.Dialog):
         self.temp_config["translate_to"] = codes[self.trans_to.GetSelection()]
         self.temp_config["translate_service"] = self.trans_service.GetStringSelection()
         self.temp_config["translate_swap"] = self.trans_swap.GetValue()
+        self.temp_config["translate_parallel_pages"] = self.trans_parallel.GetValue()
 
     def on_save(self, event):
         self._update_temp_config_from_ui()

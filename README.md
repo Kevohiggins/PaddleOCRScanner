@@ -13,8 +13,9 @@ PaddleOCR Scanner captura lo que tenés en pantalla y te permite navegar el text
 *   **Motor Robusto:** Basado en PaddleOCR (vía RapidOCR) con aceleración **OpenVINO** para reconocimiento rápido.
 *   **OCR Dinámico:** Capaz de monitorear la pantalla y reaccionar a los cambios en tiempo real (ideal para juegos o subtítulos).
 *   **Traducción Integrada:** Soporta traducción online (Google, DeepL, etc.) y **offline** (vía Argos Translate).
+*   **Modo Documentos (V2.0):** Transcribe y traduce masivamente documentos enteros (PDF, EPUB, DOCX) conservando la estructura en un archivo Word final, incluso procesando imágenes escaneadas.
 *   **Perfiles por Aplicación:** Guarda configuraciones específicas (recortes, idioma, precisión) para cada programa que uses.
-*   **Actualizador:** Ya no precisás descargar el archivo completo en cada versió, el actualizador baja lo necesario.
+*   **Actualizador:** Ya no precisás descargar el archivo completo en cada versión, el actualizador baja lo necesario.
 
 ## Descarga y Uso
 

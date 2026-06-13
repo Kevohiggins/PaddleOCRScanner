@@ -10,7 +10,7 @@ def get_base_path():
     return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 CONFIG_FILE = os.path.join(get_base_path(), "config.json")
-VERSION = "1.8"
+VERSION = "2.0"
 
 DEFAULT_CONFIG = {
     "global": {
@@ -23,6 +23,7 @@ DEFAULT_CONFIG = {
         "hotkey_window": "ctrl+alt+w",
         "hotkey_config": "ctrl+alt+c",
         "hotkey_quit": "ctrl+alt+q",
+        "hotkey_pdf": "ctrl+alt+p",
         "row_tolerance": 20,
         "dynamic_interval": 1.0,
         "hotkey_dynamic": "ctrl+alt+d",
@@ -36,16 +37,21 @@ DEFAULT_CONFIG = {
         "dynamic_interrupt": False,
         "key_next": "down",
         "key_prev": "up",
+        "key_copy": "ctrl+c",
+        "key_repeat": "space",
         "key_click": "enter",
         "key_double": "shift+enter",
         "key_right": "apps",
         "key_exit": "esc",
+        "key_word_next": "ctrl+right",
+        "key_word_prev": "ctrl+left",
         "translate_enabled": False,
         "translate_to": "es",
         "translate_from": "en",
         "translate_type": "disabled",
         "translate_service": "google",
         "translate_swap": False,
+        "translate_parallel_pages": 5,
         "hotkey_shadow_learn": "ctrl+alt+l",
         "hotkey_shadow_clear": "ctrl+alt+r",
         "hotkey_shadow_toggle": "ctrl+alt+u",

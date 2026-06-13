@@ -71,7 +71,7 @@ class ElementNavigator:
     def __init__(self, tts, config, offset_x=0, offset_y=0, rescan_callback=None):
         self.tts = tts; self.config = config; self.offset_x = offset_x; self.offset_y = offset_y
         self.rescan_callback = rescan_callback
-        self.elements = []; self.index = -1; self._hook = None; self._running = False
+        self.elements = []; self.index = -1; self.word_index = -1; self._hook = None; self._running = False
         self._hotkey_actions = {}
 
     def _precompute_hotkeys(self):
@@ -86,9 +86,10 @@ class ElementNavigator:
             "key_copy":   ("ctrl+c", self._on_copy),
             "key_first":  ("home", self._on_first),
             "key_last":   ("end", self._on_last),
-            "key_skip_next": ("right", lambda: self._on_skip(5)),
             "key_skip_prev": ("left", lambda: self._on_skip(-5)),
-            "key_repeat": ("space", self._on_repeat)
+            "key_repeat": ("space", self._on_repeat),
+            "key_word_next": ("ctrl+right", self._on_word_next),
+            "key_word_prev": ("ctrl+left", self._on_word_prev)
         }
         
         self._hotkey_actions = {}
@@ -151,10 +152,44 @@ class ElementNavigator:
             
         return False
 
-    def _on_next(self): self.index = (self.index+1)%len(self.elements); self._announce(); return True
-    def _on_prev(self): self.index = (self.index-1)%len(self.elements); self._announce(); return True
-    def _on_first(self): self.index = 0; self._announce(); return True
-    def _on_last(self): self.index = len(self.elements) - 1; self._announce(); return True
+    def _on_next(self): self.index = (self.index+1)%len(self.elements); self.word_index = -1; self._announce(); return True
+    def _on_prev(self): self.index = (self.index-1)%len(self.elements); self.word_index = -1; self._announce(); return True
+    def _on_first(self): self.index = 0; self.word_index = -1; self._announce(); return True
+    def _on_last(self): self.index = len(self.elements) - 1; self.word_index = -1; self._announce(); return True
+    
+    def _on_word_next(self):
+        if not self.elements: return True
+        el = self.elements[self.index]
+        words = el.text.split()
+        if not words: return True
+        self.word_index += 1
+        if self.word_index >= len(words):
+            self.index = (self.index + 1) % len(self.elements)
+            if self.elements[self.index].text.split():
+                self.word_index = 0
+            else:
+                self.word_index = -1
+        self._announce()
+        return True
+
+    def _on_word_prev(self):
+        if not self.elements: return True
+        el = self.elements[self.index]
+        words = el.text.split()
+        if not words: return True
+        if self.word_index == -1:
+            self.word_index = len(words) - 1
+        else:
+            self.word_index -= 1
+            if self.word_index < 0:
+                self.index = (self.index - 1) % len(self.elements)
+                prev_words = self.elements[self.index].text.split()
+                if prev_words:
+                    self.word_index = len(prev_words) - 1
+                else:
+                    self.word_index = -1
+        self._announce()
+        return True
     
     def _on_repeat(self):
         current_time = time.time()
@@ -175,6 +210,7 @@ class ElementNavigator:
     def _on_skip(self, amount):
         if not self.elements: return
         self.index = (self.index + amount) % len(self.elements)
+        self.word_index = -1
         self._announce(); return True
     def _on_left(self): self._click("left"); return True
     def _on_double(self): self._click("double"); return True
@@ -200,6 +236,12 @@ class ElementNavigator:
         if 0 <= self.index < len(self.elements):
             el = self.elements[self.index]
             text = el.text
+            
+            if getattr(self, 'word_index', -1) != -1:
+                words = text.split()
+                if 0 <= self.word_index < len(words):
+                    text = words[self.word_index]
+                    
             if self.config.get("translate_enabled"):
                 from translator import translator_instance
                 from_code = self.config.get("translate_from", "en")
@@ -212,15 +254,32 @@ class ElementNavigator:
                 )
             
             self._last_announced_text = text
-            self.tts.speak(f"{text} {self.index+1} de {len(self.elements)}", interrupt=True)
+            if getattr(self, 'word_index', -1) == -1:
+                self.tts.speak(f"{text} {self.index+1} de {len(self.elements)}", interrupt=True)
+            else:
+                self.tts.speak(text, interrupt=True)
 
     def _click(self, mode):
         if 0 <= self.index < len(self.elements):
             el = self.elements[self.index]
             
-            # 1. Movemos el mouse físicamente a la coordenada
+            # 1. Calculamos la coordenada a clickear
             abs_x = int(self.offset_x + el.center_x)
             abs_y = int(self.offset_y + el.center_y)
+            
+            if getattr(self, 'word_index', -1) != -1:
+                import re
+                words = el.text.split()
+                if 0 <= self.word_index < len(words):
+                    matches = list(re.finditer(r'\S+', el.text))
+                    if self.word_index < len(matches):
+                        m = matches[self.word_index]
+                        start_idx, end_idx = m.span()
+                        total_len = len(el.text)
+                        if total_len > 0:
+                            prop_center = ((start_idx + end_idx) / 2.0) / total_len
+                            abs_x = int(self.offset_x + el.x + (el.w * prop_center))
+
             user32.SetCursorPos(abs_x, abs_y)
             
             time.sleep(0.05) # Pausa micro para que el OS registre el movimiento

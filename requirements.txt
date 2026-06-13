@@ -1,10 +1,6 @@
 mss
-keyboard
-pyperclip
 accessible-output2
 translators
-js2py
-pynput
 pyinstaller
 wxpython
 openvino==2024.6.0
@@ -14,3 +10,12 @@ ctranslate2
 sentencepiece
 pypiwin32
 pywin32
+opencv-python
+pymupdf
+python-docx
+openpyxl
+pandas
+beautifulsoup4
+rapid-table
+rapid-layout
+

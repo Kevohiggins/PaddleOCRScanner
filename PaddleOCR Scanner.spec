@@ -12,7 +12,6 @@ VENV_SP = os.path.join(sys.prefix, 'Lib', 'site-packages')
 datas = [
     ('models', 'models'),         # Modelos de OCR y Traducción
     ('src/assets', 'src/assets'), # Iconos y sonidos
-    ('manual.html', '.'),         # El manual de usuario en la raíz
 ]
 
 # Recolectamos datos automáticos de las librerías críticas
@@ -49,15 +48,20 @@ a = Analysis(
         'ctranslate2',          # Motor de traducción Offline
         'sentencepiece',        # Tokenizador de traducción
         'accessible_output2',   # Salida para lectores de pantalla
-        'psutil',               # Control de procesos
         'cv2',                  # OpenCV para comparación visual
-        'js2py',                # Para servicios de traducción online
+        'rapid_layout',         # Motor de layout
+        'rapid_table',          # Motor de tablas
+        'fitz',                 # PyMuPDF
+        'docx',                 # Python docx
+        'pandas',               # Exportación a Excel
+        'openpyxl',             # Requisito de pandas para Excel
+        'bs4',                  # BeautifulSoup para parsear tablas
     ],
     # runtime_hook gestiona las rutas de las DLLs cuando el EXE se está ejecutando
     runtime_hooks=['runtime_hook_openvino.py'],
     excludes=[
         # Excluimos librerías pesadas que PyInstaller intenta meter por error
-        'scipy', 'matplotlib', 'pandas', 'tkinter', 
+        'scipy', 'matplotlib', 'tkinter', 
         'notebook', 'ipython', 'PyQt5', 'PySide2', 'PySide6',
         'torch', 'tensorboard', 'unittest'
     ],

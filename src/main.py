@@ -69,11 +69,13 @@ class TrayIcon(wx.adv.TaskBarIcon):
     def CreatePopupMenu(self):
         menu = wx.Menu()
         help_item = menu.Append(wx.ID_ANY, "Ayuda")
+        transcriptor_item = menu.Append(wx.ID_ANY, "Transcribir/Traducir Documento...")
         config_item = menu.Append(wx.ID_ANY, "Configuración")
         update_item = menu.Append(wx.ID_ANY, "Buscar Actualizaciones")
         exit_item = menu.Append(wx.ID_ANY, "Salir")
         
         self.Bind(wx.EVT_MENU, self.on_help, help_item)
+        self.Bind(wx.EVT_MENU, self.on_pdf_transcriptor, transcriptor_item)
         self.Bind(wx.EVT_MENU, self.on_config, config_item)
         self.Bind(wx.EVT_MENU, self.on_update, update_item)
         self.Bind(wx.EVT_MENU, self.on_exit, exit_item)
@@ -85,6 +87,9 @@ class TrayIcon(wx.adv.TaskBarIcon):
 
     def on_help(self, event):
         self.scanner._on_open_manual()
+
+    def on_pdf_transcriptor(self, event):
+        self.scanner._on_open_pdf_transcriptor()
 
     def on_config(self, event):
         self.scanner._on_open_config()
@@ -159,7 +164,7 @@ class PaddleOCRScanner:
             101: self._on_scan_screen, 102: self._on_scan_window, 103: self._on_open_config, 
             104: self._on_quit_hotkey, 105: self._toggle_dynamic_scan, 106: self._on_learn_shadow, 
             107: self._on_clear_shadow, 108: self._on_toggle_shadow, 109: self._on_open_manual,
-            110: self._on_toggle_auto_rescan
+            110: self._on_toggle_auto_rescan, 111: self._on_open_pdf_transcriptor
         }
         self.hotkey_frame = HotkeyFrame(hk_map); self._refresh_hotkeys()
         self.tts.speak("Scanner listo.")
@@ -236,6 +241,7 @@ class PaddleOCRScanner:
         self.hotkey_frame.register(108, c.get("hotkey_shadow_toggle", "ctrl+alt+u"))
         self.hotkey_frame.register(109, c.get("hotkey_manual", "ctrl+alt+f1"))
         self.hotkey_frame.register(110, c.get("hotkey_toggle_auto_rescan", "ctrl+alt+a"))
+        self.hotkey_frame.register(111, c.get("hotkey_pdf", "ctrl+alt+p"))
 
     def _on_open_manual(self):
         self._release_modifiers()
@@ -506,6 +512,17 @@ class PaddleOCRScanner:
             translator_instance.refresh_languages()
             self.tts.speak(msg)
         self._refresh_hotkeys()
+
+    def _on_open_pdf_transcriptor(self):
+        self._release_modifiers()
+        wx.CallAfter(self._open_pdf_transcriptor_native)
+
+    def _open_pdf_transcriptor_native(self):
+        from pdf_transcriptor import TranscriptorFrame
+        frame = TranscriptorFrame(self.full_config)
+        frame.Show()
+        frame.Raise()
+        frame.SetFocus()
 
     def _on_quit_hotkey(self):
         self._release_modifiers()

@@ -196,11 +196,14 @@ class Translator:
                         sentences.append(s + '.')
                 
                 trans_sentences = []
+                all_tokens = []
                 for sentence in sentences:
-                    source_tokens = sp_processor.encode(sentence, out_type=str)
-                    results = translator.translate_batch([source_tokens])
-                    trans_text = sp_processor.decode(results[0].hypotheses[0])
-                    trans_sentences.append(trans_text)
+                    all_tokens.append(sp_processor.encode(sentence, out_type=str))
+                
+                if all_tokens:
+                    results = translator.translate_batch(all_tokens)
+                    for res in results:
+                        trans_sentences.append(sp_processor.decode(res.hypotheses[0]))
                     
                 translated_lines.append(" ".join(trans_sentences).replace(' .', '.').strip())
                 
