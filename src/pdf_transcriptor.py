@@ -14,6 +14,68 @@ from layout_engine import LayoutEngine
 from config import load_config
 from translator import translator_instance
 
+def reconstruct_text(elements):
+    if not elements:
+        return ""
+    
+    # 1. Agrupar en bloques (párrafos/columnas)
+    blocks = []
+    
+    # Ordenar elementos inicialmente por Y (arriba a abajo)
+    elements.sort(key=lambda e: e.y)
+    
+    for e in elements:
+        added = False
+        for b in blocks:
+            bx1, by1, bx2, by2 = b['bbox']
+            # Overlap horizontal
+            x_overlap = max(0, min(e.x + e.w, bx2) - max(e.x, bx1))
+            min_w = min(e.w, bx2 - bx1)
+            
+            # Si hay overlap horizontal significativo
+            if min_w > 0 and (x_overlap / min_w > 0.3):
+                # Y está cerca verticalmente del fondo del bloque
+                if e.y - by2 < e.h * 2.5: 
+                    b['elements'].append(e)
+                    b['bbox'][0] = min(bx1, e.x)
+                    b['bbox'][1] = min(by1, e.y)
+                    b['bbox'][2] = max(bx2, e.x + e.w)
+                    b['bbox'][3] = max(by2, e.y + e.h)
+                    added = True
+                    break
+        
+        if not added:
+            blocks.append({
+                'bbox': [e.x, e.y, e.x + e.w, e.y + e.h],
+                'elements': [e]
+            })
+            
+    # 2. Ordenar bloques
+    row_tolerance = 50
+    blocks.sort(key=lambda b: (round(b['bbox'][1] / row_tolerance) * row_tolerance, b['bbox'][0]))
+    
+    # 3. Construir texto
+    final_text = []
+    for b in blocks:
+        b['elements'].sort(key=lambda e: e.y)
+        block_text = ""
+        prev_e = None
+        for e in b['elements']:
+            if prev_e is None:
+                block_text += e.text
+            else:
+                if e.y - (prev_e.y + prev_e.h) > e.h * 0.8:
+                    block_text += "\n\n" + e.text
+                else:
+                    if block_text.endswith("-"):
+                        block_text = block_text[:-1] + e.text
+                    else:
+                        block_text += " " + e.text
+            prev_e = e
+        final_text.append(block_text)
+        
+    return "\n\n".join(final_text)
+
 class TranscriptorFrame(wx.Frame):
     def __init__(self, config=None):
         super().__init__(None, title="Modo Documentos - PaddleOCR Scanner", size=(700, 750))
@@ -210,12 +272,12 @@ class TranscriptorFrame(wx.Frame):
                                     page_data["blocks"].append({"type": "table", "content": matrix})
                             else:
                                 elements = self.ocr.scan_image(region_img)
-                                text_block = "\n".join([e.text for e in elements])
+                                text_block = reconstruct_text(elements)
                                 if text_block.strip():
                                     page_data["blocks"].append({"type": "text", "content": text_block})
                     else:
                         elements = self.ocr.scan_image(img)
-                        text_page = "\n".join([e.text for e in elements])
+                        text_page = reconstruct_text(elements)
                         if text_page.strip():
                             page_data["blocks"].append({"type": "text", "content": text_page})
                             
