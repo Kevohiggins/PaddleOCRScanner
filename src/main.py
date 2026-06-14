@@ -518,11 +518,16 @@ class PaddleOCRScanner:
         wx.CallAfter(self._open_pdf_transcriptor_native)
 
     def _open_pdf_transcriptor_native(self):
-        from pdf_transcriptor import TranscriptorFrame
-        frame = TranscriptorFrame(self.full_config)
-        frame.Show()
-        frame.Raise()
-        frame.SetFocus()
+        try:
+            from pdf_transcriptor import TranscriptorFrame
+            frame = TranscriptorFrame(self.full_config)
+            frame.Show()
+            frame.Raise()
+            frame.SetFocus()
+        except Exception as e:
+            import traceback
+            with open("pdf_error.log", "w") as f:
+                traceback.print_exc(file=f)
 
     def _on_quit_hotkey(self):
         self._release_modifiers()
@@ -552,8 +557,9 @@ def main():
         except Exception:
             pass
 
-    if not ctypes.windll.shell32.IsUserAnAdmin():
-        ctypes.windll.shell32.ShellExecuteW(None, "runas", sys.executable, f'"{os.path.abspath(sys.argv[0])}"', None, 1)
-    else: PaddleOCRScanner().start()
+    #if not ctypes.windll.shell32.IsUserAnAdmin():
+    #    ctypes.windll.shell32.ShellExecuteW(None, "runas", sys.executable, f'"{os.path.abspath(sys.argv[0])}"', None, 1)
+    #else: 
+    PaddleOCRScanner().start()
 
 if __name__ == "__main__": main()

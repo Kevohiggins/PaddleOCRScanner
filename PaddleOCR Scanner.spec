@@ -16,6 +16,8 @@ datas = [
 
 # Recolectamos datos automáticos de las librerías críticas
 datas += collect_data_files('rapidocr_openvino')
+datas += collect_data_files('rapid_table')
+datas += collect_data_files('rapid_layout')
 datas += collect_data_files('openvino')
 datas += collect_data_files('sentencepiece')
 
@@ -52,6 +54,7 @@ a = Analysis(
         'rapid_layout',         # Motor de layout
         'rapid_table',          # Motor de tablas
         'fitz',                 # PyMuPDF
+        'pymupdf',              # PyMuPDF core
         'docx',                 # Python docx
         'pandas',               # Exportación a Excel
         'openpyxl',             # Requisito de pandas para Excel
