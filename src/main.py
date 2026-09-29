@@ -5,10 +5,12 @@
 import ctypes
 import logging
 import os
-# Obligar a OpenVINO/OpenMP/MKL a usar un máximo de 2 a 4 hilos
-os.environ["OMP_NUM_THREADS"] = "2"
-os.environ["OPENBLAS_NUM_THREADS"] = "2"
-os.environ["MKL_NUM_THREADS"] = "2"
+# Limitar hilos de OpenVINO/OpenMP/MKL dejando 1-2 núcleos libres para la
+# GUI, TTS y captura (evita congelamientos y sature el sistema con muchos núcleos).
+_nanos_threads = max(2, (os.cpu_count() or 4) - 2)
+os.environ["OMP_NUM_THREADS"] = str(_nanos_threads)
+os.environ["OPENBLAS_NUM_THREADS"] = str(_nanos_threads)
+os.environ["MKL_NUM_THREADS"] = str(_nanos_threads)
 import sys
 import threading
 import time
@@ -444,7 +446,9 @@ class PaddleOCRScanner:
             time.sleep(remaining)
 
     def _start_scan(self, mode, img_data=None):
-        if self._scan_lock.locked(): return
+        if self._scan_lock.locked():
+            self.tts.speak("Escaneo en curso, esperá un momento.")
+            return
         threading.Thread(target=self._do_scan, args=(mode, img_data), daemon=True).start()
 
     def _do_scan(self, mode, img_data=None):

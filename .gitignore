@@ -1,0 +1,26 @@
+# Entornos virtuales
+.venv/
+env/
+venv/
+
+# Modelos binarios pesados (OpenVINO / ONNX / Argos / CTranslate2)
+models/
+
+# Compilación y empaquetado
+build/
+dist/
+*.spec.bak
+
+# Bytecode y cache de Python
+__pycache__/
+*.py[cod]
+*$py.class
+src/__pycache__/
+
+# Logs y temporales
+*.log
+tmp/
+.cache/
+
+# Archivos de configuración local o temporales
+config.local.json

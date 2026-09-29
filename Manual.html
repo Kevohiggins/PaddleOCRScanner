@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PaddleOCR Scanner - Manual de Usuario</title>
+    <style>
+        body {
+            font-family: "Segoe UI", Arial, sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 20px;
+            background-color: #f8f9fa;
+            color: #333;
+        }
+        .container {
+            max-width: 850px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+        h1 { color: #2c3e50; border-bottom: 3px solid #e67e22; padding-bottom: 10px; text-align: center; }
+        h2 { color: #d35400; margin-top: 25px; border-left: 5px solid #e67e22; padding-left: 10px; }
+        code {
+            background-color: #fdf2e9;
+            padding: 3px 6px;
+            border-radius: 4px;
+            font-family: "Consolas", monospace;
+            font-weight: bold;
+            color: #d35400;
+        }
+        .info-box {
+            background-color: #fef5e7;
+            border-left: 6px solid #e67e22;
+            padding: 15px;
+            margin: 20px 0;
+            font-style: italic;
+        }
+        .warning-box {
+            background-color: #fdf2f2;
+            border-left: 6px solid #e74c3c;
+            padding: 15px;
+            margin: 20px 0;
+            color: #7f231c;
+        }
+        li { margin-bottom: 12px; }
+        footer {
+            text-align: center;
+            margin-top: 40px;
+            font-size: 0.85em;
+            color: #95a5a6;
+            border-top: 1px solid #eee;
+            padding-top: 20px;
+        }
+        a { color: #e67e22; text-decoration: none; font-weight: bold; }
+        a:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Manual de PaddleOCR Scanner</h1>
+
+        <div class="info-box">
+            <strong>¿Qué es esto?</strong> PaddleOCR Scanner (no me maté pensando un nombre JAJAJAJAJ es re genérico) es un programa que cumple exactamente la misma función que el OCR de Windows, pero usa otro motor que es... sí, adivinaste. Paddle.
+No pretendo que le des un uso particular a este programa, yo lo creé porque el OCR de Windows no me dejaba leer el menú de una novela visual y eso me hizo enfurecer ah.
+        </div>
+
+        <p>Por si no entendiste, básicamente este programa te permite capturar lo que tengas en pantalla y navegarlo con el teclado, simulando un "cursor virtual" sobre el texto detectado. Todavía no permite que leas el texto palabra por palabra, a lo mejor implemento una interfaz para los resultados más tarde.</p>
+
+<p>Ahh, una cosa: este manual se redactó usando las teclas que hay por defecto. Si vos querés cambiarlas, sos libre de hacerlo.</p>
+
+        <h2>Atajos de Teclado Globales (Por Defecto)</h2>
+        <ul>
+            <li><code>Control + Alt + S</code>: <strong>Escaneo de Pantalla.</strong> Captura todo lo que se ve en el monitor y permite navegarlo elemento por elemento.</li>
+            <li><code>Control + Alt + W</code>: <strong>Escaneo de Ventana.</strong> Enfoca el OCR únicamente en la ventana que tengas activa en ese momento.</li>
+            <li><code>Control + Alt + D</code>: <strong>Escaneo Dinámico.</strong> Activa el modo de "lectura en tiempo real". Ideal para seguir subtítulos.</li>
+            <li><code>Control + Alt + L</code>: <strong>Aprendizaje de Modo Sombra.</strong> Analiza la pantalla por 5 segundos para identificar elementos estáticos que deben ser ignorados.</li>
+            <li><code>Control + Alt + R</code>: <strong>Resetear Modo Sombra.</strong> Borra las sombras de la ventana actual.</li>
+            <li><code>Control + Alt + U</code>: <strong>Alternar Modo Sombra.</strong> Activa o desactiva el filtrado de los elementos ignorados.</li>
+            <li><code>Control + Alt + P</code>: <strong>Modo Documentos.</strong> Abre la ventana del transcriptor y traductor de PDF/EPUB. (Modificable desde ajustes).</li>
+            <li><code>Control + Alt + F1</code>: <strong>Abrir Manual.</strong> Abre este archivo de ayuda en el navegador.</li>
+            <li><code>Control + Alt + C</code>: <strong>Configuración.</strong> Abre el panel para cambiar resoluciones, atajos y zonas de recorte.</li>
+            <li><code>Control + Alt + Q</code>: <strong>Cerrar Programa.</strong> Apaga el scanner por completo.</li>
+        </ul>
+
+        <h2>Navegación de Resultados</h2>
+        <p>Cuando hacés un escaneo estático (S o W), el programa te dirá cuántos elementos encontró. A partir de ahí podés moverte libremente simulando un cursor virtual. Todos estos atajos los podés modificar en la configuración:</p>
+        <ul>
+            <li><code>Flecha Arriba / Flecha Abajo</code>: <strong>Anterior y Siguiente.</strong> Te movés elemento por elemento en la pantalla.</li>
+            <li><code>Flecha Izquierda / Flecha Derecha</code>: <strong>Saltos rápidos.</strong> Avanzás o retrocedés de a 5 elementos a la vez. Ideal para pantallas llenas de texto.</li>
+            <li><code>Control + Flecha Izquierda / Derecha</code>: <strong>Navegación por Palabras.</strong> Si estás en un bloque con mucho texto, te permite aislar una palabra específica. Si hacés click mientras estás en ella, el programa calcula su posición exacta y hace click en el centro. Útil para menús horizontales.</li>
+            <li><code>Inicio / Fin</code>: <strong>Primer y Último Resultado.</strong> Te llevan instantáneamente al principio o al final de la lista.</li>
+            <li><code>Espacio</code>: <strong>Repetir / Deletrear.</strong> Vuelve a leer en voz alta el elemento donde estás parado. Si apretás espacio <strong>dos veces rápido</strong>, deletrea.</li>
+            <li><code>Control + C</code>: <strong>Copiar.</strong> Guarda el texto actual (incluso si está traducido) directo en tu portapapeles de Windows.</li>
+            <li><code>Enter / Shift + Enter</code>: <strong>Clicks Izquierdos.</strong> Hace un click izquierdo (o doble click con Shift) real de tu mouse justo donde se detectó el texto.</li>
+            <li><code>Tecla Aplicaciones / Menú</code>: <strong>Click Derecho.</strong> Hace un click derecho sobre el elemento.</li>
+            <li><code>Escape</code>: <strong>Salir.</strong> Cierra el modo de navegación y libera tu teclado.</li>
+        </ul>
+
+        <div class="warning-box">
+            <strong>Permisos de Administrador:</strong> Para que el programa pueda capturar teclas y hacer clicks en ventanas que tienen privilegios elevados (como el Administrador de Tareas), es necesario ejecutar PaddleOCR Scanner como administrador.
+        </div>
+
+<h2>Uso del Escaneo Dinámico</h2>
+        <p>Al pulsar <code>Control + Alt + D</code>, el programa vigila la pantalla en bucle y te habla cuando detecta un cambio significativo (como un nuevo subtítulo). Este modo es muy potente pero requiere un ajuste fino de los filtros para no volverte loco con la "basura" visual.</p>
+        <p>Podés configurar el <strong>margen de recorte</strong> en los ajustes para que el programa ignore áreas específicas (como un chat o un HUD) y no se distraiga.</p>
+<p>Sí, ya sé que hay un complemento de NVDA que hace esto. Yo mismo fomento su uso, pero como todos los años hay historia con los complementos, es posible que este programa subsista por más tiempo. Además, hay una novedad, que es...</p>
+
+<h2>Modo Sombra</h2>
+        <p>El <strong>Modo Sombra</strong> es una función diseñada para limpiar los resultados del OCR. Su objetivo es enseñarle al programa a ignorar elementos estáticos de la interfaz (como la barra de tareas, títulos de ventanas, logos de canales, o menús que no cambian) para que solo te lea lo que realmente importa.</p>
+        
+        <p><strong>¿Cómo funciona el aprendizaje?</strong></p>
+        <p>Al presionar <code>Control + Alt + L</code>, el programa entra en fase de "aprendizaje". <strong>Todo el texto que NO se mueva ni cambie durante ese tiempo, será memorizado como "sombra" (interfaz muerta).</strong></p>
+        <p><strong>¿Cuánto dura el aprendizaje?</strong> El programa tomará una serie de capturas (fotos) separadas por 1 segundo de pausa cada una. La cantidad de fotos se puede elegir en la pestaña de <em>Precisión</em> (por defecto son 4 fotos, lo que equivale a unos 4-5 segundos). Si ponés 15 fotos, el programa observará la pantalla pacientemente por 15 segundos para asegurarse con precisión quirúrgica de qué cosas realmente no se mueven nunca.</p>
+        
+        <p><strong>¿Cómo ensombrecer un navegador para leer subtítulos?</strong></p>
+        <p>Tenés dos estrategias para hacerlo:</p>
+        <ul>
+            <li><strong>Estrategia 1 (Pausado sin texto):</strong> Pausá el video de YouTube/Anime exactamente en un segundo donde <strong>no haya ningún subtítulo</strong> en pantalla. Apretá el atajo de aprender. El programa memorizará toda la interfaz del navegador y el logo del canal. Cuando vuelvas a darle play y prendas el escáner dinámico, ¡solo detectará los subtítulos porque son lo único nuevo. Sí, JKAnime, este quilombo lo hice únicamente por vos, espero que estés feliz ah.</li>
+            <li><strong>Estrategia 2 (Dejarlo correr):</strong> Si estás en un juego (como una novela visual jeje) o un chat donde el texto cambia muy rápido, dejá que el texto fluya normalmente y ponelo a aprender. Como el programa toma fotos y las compara, se va a dar cuenta de que los diálogos cambiaron, por ende <strong>NO los va a ensombrecer</strong>. Solo ensombrecerá el botón estático de "Guardar Partida" o el marco de la ventana.</li>
+        </ul>
+
+        <p>Si te equivocaste o cambiaste de ventana, pulsando <code>Control + Alt + R</code>, reseteás las sombras para esa ventana actual.</p>
+
+<h2>Perfiles por Aplicación</h2>
+        <p>El Scanner es capaz de recordar configuraciones específicas para cada juego o programa que uses.</p>
+        <p><strong>¿Cómo se crean?</strong></p>
+        <p>Desde los ajustes. El botón de "Crear Perfil" confecciona uno para la aplicación donde estabas cuando invocaste la configuración.</p>
+		<p>Si no, tenés otra opción: al usar el <em>Modo Sombra</em> (aprendizaje) por primera vez en una ventana, el programa creará automáticamente un perfil. Es para poder almacenar las sombras sin mezclarlas con las de otros.</p>
+        <p>Cuando abras el panel de configuración (<code>Control + Alt + C</code>), vas a ver un cuadro combinado de perfiles. Si lo dejás en global modifica los ajustes generales, pero si elegís otro perfil, personalizás la configuración individual:</p>
+<p>Podés configurar idioma, recortes, reescaneo... todo.</p>
+        <p>Cuando abras un programa con perfil propio, el scanner lo debería cargar automáticamente. Si una aplicación no tiene uno, va a usar el "Global".</p>
+
+		<h2>Modo Documentos (Transcriptor y Traductor)</h2>
+        <p>Introducido en la Versión 2.0, el Modo Documentos (<code>Control + Alt + P</code>) es una herramienta experimental para procesar libros y documentos enteros (PDF, EPUB, DOCX, MOBI, FB2, CBZ, etc.).</p>
+        <p>A diferencia del escáner en tiempo real, acá podés cargar un documento completo y el programa se encarga de extraer o escanear página por página todo el texto. Además, si tenés activada la traducción, irá traduciendo y reconstruyendo el documento para entregarte un archivo de Word (.docx) final con el texto en tu idioma.</p>
+        <ul>
+            <li><strong>Modo Híbrido:</strong> Mantiene el párrafo original y justo abajo te pone la traducción, ideal para estudiar o comparar.</li>
+            <li><strong>Optimización multi-hilo:</strong> Si usás la traducción online, enviará varias páginas a la vez para que el documento de 300 páginas esté listo en segundos.</li>
+            <li><strong>Detección de oraciones cortadas:</strong>Si un párrafo queda cortado al final de una página, El motor lo une automáticamente con la primera oración de la página siguiente para que la traducción tenga sentido.</li>
+            <li><strong>Archivos Escaneados:</strong> Si el PDF son solo fotos escaneadas, el programa usará la IA de Paddle para extraer todo, detectando y reconstruyendo incluso tablas complejas si activás la opción en la interfaz.</li>
+        </ul>
+
+		<h2>Configuración</h2>
+        <p>A través del panel de configuración (<code>Control + Alt + C</code>), podés ajustar el comportamiento del scanner. Se maneja por pestañas que explico a continuación.</p>
+        
+        <h3>1. General</h3>
+        <ul>
+            <li><strong>Idioma OCR:</strong> Podés elegir entre los idiomas que tengas instalados. Si te falta alguno, lo instalás desde la configuración de Windows</li>
+            <li><strong>Escalado de Imagen:</strong> Esto es clave. Tenés 8 niveles disponibles: desde <code>Baja (40%)</code> para máxima velocidad, pasando por niveles intermedios muy útiles como <code>Media (60%)</code> y <code>Media-Alta (75%)</code>, hasta <code>Ultra (200%)</code> para textos diminutos. <code>Nativa (100%)</code> es lo normal.</li>
+            <li><strong>Reescanear tras click:</strong> Podés hacer que el programa vuelva a escanear automáticamente después de interactuar con algún elemento. También podés configurar la espera entre la interacción y el escaneo (en décimas de segundo).</li>
+		</ul>
+
+        <h3>2. Atajos de Teclado</h3>
+        <p>Acá podés cambiar todas las teclas del programa. Se divide en tres bloques:</p>
+        <ul>
+            <li><strong>Escaneo y Programa:</strong> Las teclas para sacar las capturas y cerrar la cosa esta.</li>
+            <li><strong>Modo Sombra:</strong> Los comandos para aprender, resetear o activar el filtro de elementos estáticos.</li>
+            <li><strong>Navegación:</strong> Las teclas que usás para moverte por los resultados (flechas, enter, etc.).</li>
+        </ul>
+
+        <h3>3. Recortes</h3>
+        <ul>
+            <li><strong>Recortes de Pantalla (%):</strong> Esto es proporcional. Podés decirle que ignore un porcentaje de los bordes (Superior, Inferior, Izquierdo, Derecho). Ideal para ignorar la barra de tareas o los menús laterales de un juego sin importar la resolución que uses.</li>
+        </ul>
+
+        <h3>4. Escaneo Dinámico</h3>
+        <ul>
+            <li><strong>Objetivo del escaneo:</strong> Podés elegir si el programa debe vigilar la <strong>Pantalla Completa</strong> o solo la <strong>Ventana Activa</strong> en tiempo real.</li>
+            <li><strong>Intervalo (décimas):</strong> Cada cuánto tiempo el programa intenta leer la pantalla. 10 décimas es un segundo. Si querés que sea algo más instantáneo, bajalo a 5. Tené en cuenta que esto depende mucho de tus requisitos de sistema.</li>
+            <li><strong>Sensibilidad:</strong> Qué tanto cambio hace falta en la imagen para que el programa decida volver a leer el texto. A más alta la sensibilidad, más probable que lea cosas que ya leyó o texto basura.</li>
+            <li><strong>Modo Diferencial:</strong> Si lo activás, el programa solo leerá el contenido nuevo, ignorando lo que ya leyó aunque siga estando presente (ideal para chats y subtítulos). En este modo, la sensibilidad al cambio controla qué tan estricto es el modelo de comparación de elementos individuales.</li>
+            <li><strong>Interrumpir lector de pantalla:</strong> Si lo marcás, el programa interrumpe al lector de pantalla para leer el texto nuevo, no importa lo que está leyendo antes. Si lo dejás desmarcado, termina lo viejo, y recién entonces lee lo nuevo.</li>
+        </ul>
+
+        <h3>5. Mejoras para OCR</h3>
+        <p>Esta pestaña es un "laboratorio de imágenes" para ayudar al motor a leer textos difíciles. Las mejoras se aplican en cadena, pero <strong>usarlas sin necesidad puede empeorar el reconocimiento</strong>.</p>
+        <ul>
+            <li><strong>Enfoque de Bordes:</strong> Resalta los bordes de las letras. Útil si el texto se ve medio borroso por la resolución.</li>
+            <li><strong>Contraste Adaptativo (CLAHE):</strong> La mejora más recomendada. Empareja la luz y resalta el texto sobre fondos oscuros o con degradados. Funciona bien en la mayoría de los casos.</li>
+            <li><strong>Binarización:</strong> Pasa la imagen a blanco y negro puro. Útil para juegos muy viejos (tipo pixel-art), pero en juegos modernos puede confundir a la IA.</li>
+            <li><strong>Engrosar Letras (Dilatación):</strong> Hace las letras más gruesas. Solo sirve si las fuentes son microscópicas o de un solo píxel de ancho.</li>
+        </ul>
+        <blockquote>
+            <strong>Recomendación:</strong> En general, con el <strong>CLAHE</strong> deberías andar bien. Podés activar el resto, obvio, pero con cuidado porque si las activás todas al tuntún para ver qué onda, podrías empeorar el resultado en vez de mejorarlo.
+        </blockquote>
+
+        <h3>6. Traducción</h3>
+        <p>Esta función te permite leer textos en idiomas que no conocés. Se divide en tres modalidades principales que podés elegir en el primer cuadro combinado:</p>
+        
+        <ul>
+            <li><strong>Desactivada:</strong> El programa leerá el texto original detectado por el OCR. Es el modo más rápido.</li>
+            <li><strong>Local (Offline):</strong> Se procesa íntegramente en tu PC sin usar internet. Es la opción más privada y estable, pero requiere que descargues los modelos de idioma.</li>
+            <li><strong>Online (Translators):</strong> Usa servicios de internet. Es la opción con más soporte de idiomas y no requiere descargar nada, pero depende de tu conexión.</li>
+        </ul>
+
+        <h4>Traducción Online (Internet)</h4>
+        <p>Cuando elegís este modo, se habilitan dos opciones adicionales:</p>
+        <ul>
+            <li><strong>Servicio Online:</strong> Podés elegir entre decenas de servidores (Google, Bing, DeepL, Yandex, etc.). Si uno falla o te da resultados raros, podés probar con otro al instante.</li>
+            <li><strong>Intercambio Inteligente:</strong> Si lo activás, el programa detecta automáticamente el idioma de origen. Si detecta el idioma de destino (por ejemplo, español), lo traducirá automáticamente al idioma opuesto (por ejemplo, inglés).</li>
+        </ul>
+        
+        <div class="warning-box">
+            <strong>Aviso sobre los Servidores Online:</strong><br>
+            Estos servicios funcionan emulando ser un navegador web. Si un servidor tarda mucho o cambia su página, la interfaz podría tildarse un segundo. Si un servidor deja de funcionar, simplemente elegí otro de la lista.
+        </div>
+
+        <h4>Traducción Local (Offline)</h4>
+        <p>Es la opción recomendada para privacidad y estabilidad. Funciona mediante modelos comprimidos que se guardan en tu PC.</p>
+        <ul>
+            <li><strong>Almacenamiento:</strong> Los modelos se guardan en <code>_internal/models/argos_ct2</code>. Son portátiles; si movés la carpeta del programa, tus idiomas van con vos.</li>
+            <li><strong>Sin Reinicios:</strong> A partir de la versión 1.5, podés descargar un idioma y usarlo al instante sin necesidad de reiniciar el programa.</li>
+            <li><strong>Administrador de Modelos:</strong> El botón de acción cambia dinámicamente:
+                <ul>
+                    <li><strong>Descargar modelo:</strong> Si el par de idiomas elegido no está en tu PC.</li>
+                    <li><strong>Eliminar modelo:</strong> Si ya tenés el modelo y querés liberar espacio (se pone en color rojo).</li>
+                </ul>
+            </li>
+        </ul>
+
+        <div style="background: #eaf2f8; border-left: 4px solid #3498db; padding: 15px; margin: 15px 0; border-radius: 4px;">
+            <strong>Nota sobre el "Idioma Puente":</strong><br>
+            Hay idiomas que no tienen traducción directa al español (como el Japonés). Si configurás Japonés a Español, el programa usará el inglés como "puente" automáticamente, realizando una doble traducción interna para darte el resultado.
+        </div>
+        
+        <h2>Soporte Multi-Idioma (v5)</h2>
+        <p>Ahora podés elegir el modelo de reconocimiento optimizado para el idioma que necesites leer en la configuración (<code>Control + Alt + C</code>). Esto es fundamental porque un modelo entrenado para letras latinas no puede leer caracteres asiáticos correctamente.</p>
+        <p>Idiomas disponibles:</p>
+        <ul>
+            <li><strong>Latino:</strong> Español, Inglés, Francés, Alemán y otros 30 idiomas.</li>
+            <li><strong>Japonés / Chino:</strong> Hiragana, Katakana, Kanjis y caracteres Chinos.</li>
+            <li><strong>Coreano:</strong> Alfabeto Hangul.</li>
+            <li><strong>Cirílico:</strong> Ruso, Ucraniano, Búlgaro y Bielorruso.</li>
+            <li><strong>Tailandés:</strong> Escritura tailandesa.</li>
+            <li><strong>Árabe:</strong> Árabe, Urdu y Persa (Farsi).</li>
+            <li><strong>Hindi:</strong> Hindi, Marathi, Nepalí y Sánscrito.</li>
+        </ul>
+        <p><strong>Nota técnica:</strong> Al cambiar de idioma, el programa recarga el motor de inteligencia artificial. Esto puede tardar un segundo extra la primera vez que se realiza el escaneo en el nuevo idioma.</p>
+        
+		<h2>Créditos</h2>
+        <p>Quiero dejar claro que yo no escribí una sola línea de código. Todo esto es obra de <a href="https://gemini.google.com" target="_blank">Gemini, la inteligencia artificial de Google (se abre en una nueva pestaña)</a>.</p>
+        <p>Únicamente me encargué de idear, probar, reportar bugs, y promptear (hablar con la IA) como un desgraciado para que haga lo que le pido.</p>
+
+        <p>Si querés ayudarme para que pueda comprarme una birra, o para pensar en futuros programas con más emoción, podés incentivarme donándome:</p>
+        <ul>
+            <li><a href="https://www.paypal.com/paypalme/KevOHiggins" target="_blank">Por PayPal, si sos de afuera</a></li>
+            <li><a href="https://link.mercadopago.com.ar/kevohiggins" target="_blank">Por Mercado Pago, si sos de Argentina</a></li>
+        </ul>
+        <p>Si querés reportar errores, si tenés sugerencias, o si formás parte de la población femenina, podés utilizar <a href="https://kevohiggins.github.io/contactame">este apartado para contactarme</a>.</p>
+        
+		<footer>
+            <p>PaddleOCR Scanner - 2026 | Potenciado por RapidOCR & ONNX.</p>
+            <p>Donaciones: <a href="https://www.paypal.com/paypalme/KevOHiggins" target="_blank">PayPal</a> | <a href="https://link.mercadopago.com.ar/kevohiggins" target="_blank">Mercado Pago</a></p>
+        </footer>
+    </div>
+</body>
+</html>

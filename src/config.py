@@ -1,3 +1,4 @@
+import copy
 import json
 import os
 import sys
@@ -52,16 +53,15 @@ DEFAULT_CONFIG = {
         "translate_service": "google",
         "translate_swap": False,
         "translate_parallel_pages": 5,
+        "ocr_parallel_pages": 4,
         "hotkey_shadow_learn": "ctrl+alt+l",
         "hotkey_shadow_clear": "ctrl+alt+r",
         "hotkey_shadow_toggle": "ctrl+alt+u",
         "shadow_burst_count": 4,
-        "key_copy": "ctrl+c",
         "key_first": "home",
         "key_last": "end",
         "key_skip_next": "right",
         "key_skip_prev": "left",
-        "key_repeat": "space",
         "hotkey_manual": "ctrl+alt+f1",
         "auto_rescan_after_click": False,
         "auto_rescan_delay": 5,
@@ -86,7 +86,9 @@ def load_config() -> dict:
                 user_config = new_config
 
             # Mezclar con defaults para asegurar que no falten llaves
-            final_config = DEFAULT_CONFIG.copy()
+            # deepcopy: si copiamos superficial, los .update() de abajo mutan
+            # el DEFAULT_CONFIG global y corrompen los defaults para el resto del proceso
+            final_config = copy.deepcopy(DEFAULT_CONFIG)
             final_config["global"].update(user_config.get("global", {}))
             final_config["profiles"].update(user_config.get("profiles", {}))
             final_config["shadow_profiles"].update(user_config.get("shadow_profiles", {}))

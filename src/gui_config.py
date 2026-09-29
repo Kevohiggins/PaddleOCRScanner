@@ -322,6 +322,13 @@ class ConfigWindow(wx.Dialog):
         self.trans_parallel = wx.SpinCtrl(self.tab_trans, min=1, max=30)
         para_sizer.Add(self.trans_parallel, 0, wx.EXPAND)
         sizer.Add(para_sizer, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 15)
+
+        # Nuevo: Paralelización de extracción OCR
+        ocr_para_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        ocr_para_sizer.Add(wx.StaticText(self.tab_trans, label="Páginas a extraer en paralelo (OCR):"), 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 10)
+        self.ocr_parallel = wx.SpinCtrl(self.tab_trans, min=1, max=30)
+        ocr_para_sizer.Add(self.ocr_parallel, 0, wx.EXPAND)
+        sizer.Add(ocr_para_sizer, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 15)
         
         self.trans_status = wx.StaticText(self.tab_trans, label="Estado: Listo")
         sizer.Add(self.trans_status, 0, wx.LEFT, 15)
@@ -462,7 +469,7 @@ class ConfigWindow(wx.Dialog):
         for kid in self.PRO_NAMES: getattr(self, f"btn_{kid}").SetLabel(f"{self.PRO_NAMES[kid]}: {c.get(kid, defs.get(kid, 'Sin asignar'))}")
         self.min_conf.SetValue(int(c.get("min_confidence", 0.5) * 100))
         s_vals = [0.4, 0.5, 0.6, 0.75, 0.9, 1.0, 1.5, 2.0]
-        current_scale = float(c.get("image_scale", 1.0))
+        current_scale = float(c.get("image_scale", 0.5))
         s_idx = min(range(len(s_vals)), key=lambda i: abs(s_vals[i] - current_scale))
         self.scale_choice.SetSelection(s_idx)
         self.crop_t.SetValue(int(c.get("crop_top", 0))); self.crop_b.SetValue(int(c.get("crop_bottom", 0)))
@@ -496,6 +503,7 @@ class ConfigWindow(wx.Dialog):
         self.trans_service.SetStringSelection(service)
         self.trans_swap.SetValue(c.get("translate_swap", False))
         self.trans_parallel.SetValue(int(c.get("translate_parallel_pages", 5)))
+        self.ocr_parallel.SetValue(int(c.get("ocr_parallel_pages", 4)))
         
         self.update_trans_ui()
 
@@ -533,6 +541,7 @@ class ConfigWindow(wx.Dialog):
         self.temp_config["translate_service"] = self.trans_service.GetStringSelection()
         self.temp_config["translate_swap"] = self.trans_swap.GetValue()
         self.temp_config["translate_parallel_pages"] = self.trans_parallel.GetValue()
+        self.temp_config["ocr_parallel_pages"] = self.ocr_parallel.GetValue()
 
     def on_save(self, event):
         self._update_temp_config_from_ui()

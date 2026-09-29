@@ -208,7 +208,7 @@ class ElementNavigator:
             self.tts.speak(spelled, interrupt=True)
 
     def _on_skip(self, amount):
-        if not self.elements: return
+        if not self.elements: return True
         self.index = (self.index + amount) % len(self.elements)
         self.word_index = -1
         self._announce(); return True

@@ -38,19 +38,24 @@ class Translator:
         self._initialized = False
         self._initializing = False
         self._on_ready_callback = None
-        self._lock = threading.Lock()
-        
+        # El lock solo protege la carga de modelos, NO la traducción.
+        # CTranslate2.Translator es thread-safe (libera el GIL), pero el
+        # SentencePieceProcessor NO lo es: cada thread usa el suyo (thread-local).
+        self._model_lock = threading.Lock()
+        self._thread_local_sp = threading.local()
+        self._model_paths = {}
+
         self._master_catalog_path = get_resource_path(os.path.join("src", "assets", "languages_catalog.json"))
-        
+
         # Diccionarios de idiomas y estado
         self._available_languages = {}
         self._argos_index = [] # JSON de internet
         self._installed_pairs = set() # set de tuplas ("en", "es")
-        
-        # Caché de modelos cargados en memoria RAM para no recargarlos en cada frase
-        # key: "en_es", value: (ctranslate2.Translator, spm.SentencePieceProcessor)
-        self._loaded_models = {}
-        
+
+        # Caché de TRANSLATORS compartidos (thread-safe) en memoria RAM
+        # key: "en_es", value: ctranslate2.Translator
+        self._loaded_translators = {}
+
         self._load_catalogs()
 
     def _load_catalogs(self):
@@ -141,34 +146,56 @@ class Translator:
         return False
 
     def _get_model(self, from_code, to_code):
-        # Devuelve el (translator, sp_processor) para el par
+        # Devuelve (translator, sp_processor) para el par.
+        # - translator: Compartido entre hilos (CTranslate2 es thread-safe).
+        # - sp_processor: thread-local (SentencePiece NO es thread-safe).
         pair_key = f"{from_code}_{to_code}"
-        if pair_key in self._loaded_models:
-            return self._loaded_models[pair_key]
-            
-        model_dir = os.path.join(MODELS_DIR, pair_key)
-        
-        # En el ZIP, Argos guarda los archivos en subcarpetas con versiones.
-        ct2_dir = None
-        sp_path = None
-        
-        for root, dirs, files in os.walk(model_dir):
-            if "model.bin" in files:
-                ct2_dir = root
-            if "sentencepiece.model" in files:
-                sp_path = os.path.join(root, "sentencepiece.model")
-                
-        if not ct2_dir or not sp_path:
-            return None, None
-            
-        try:
-            translator = ctranslate2.Translator(ct2_dir, device="cpu", compute_type="int8")
-            sp_processor = spm.SentencePieceProcessor(model_file=sp_path)
-            self._loaded_models[pair_key] = (translator, sp_processor)
-            return translator, sp_processor
-        except Exception as e:
-            logger.error(f"Error cargando modelo en memoria ({pair_key}): {e}")
-            return None, None
+        translation_model_dir = os.path.join(MODELS_DIR, pair_key)
+
+        with self._model_lock:
+            translator = self._loaded_translators.get(pair_key)
+            if translator is None:
+                ct2_dir = None
+                for root, dirs, files in os.walk(translation_model_dir):
+                    if "model.bin" in files:
+                        ct2_dir = root
+                        break
+                if ct2_dir is None:
+                    return None, None
+                try:
+                    translator = ctranslate2.Translator(ct2_dir, device="cpu", compute_type="int8")
+                    self._loaded_translators[pair_key] = translator
+                except Exception as e:
+                    logger.error(f"Error cargando modelo en memoria ({pair_key}): {e}")
+                    return None, None
+
+        sp_path = self._model_paths.get(pair_key)
+        if sp_path is None:
+            for root, dirs, files in os.walk(translation_model_dir):
+                if "sentencepiece.model" in files:
+                    sp_path = os.path.join(root, "sentencepiece.model")
+                    break
+            if sp_path:
+                self._model_paths[pair_key] = sp_path
+
+        sp_processor = self._get_thread_local_processor(pair_key, sp_path)
+        return translator, sp_processor
+
+    def _get_thread_local_processor(self, pair_key, sp_path):
+        """SentencePiece por-thread: cada hilo crea y reutiliza el suyo."""
+        if sp_path is None:
+            return None
+        cache = getattr(self._thread_local_sp, "cache", None)
+        if cache is None:
+            cache = {}
+            self._thread_local_sp.cache = cache
+        if pair_key not in cache:
+            try:
+                cache[pair_key] = spm.SentencePieceProcessor(model_file=sp_path)
+            except Exception as e:
+                logger.error(f"Error cargando SentencePiece ({pair_key}): {e}")
+                return None
+        return cache[pair_key]
 
     def _translate_direct(self, text, from_code, to_code):
         translator, sp_processor = self._get_model(from_code, to_code)
@@ -229,19 +256,19 @@ class Translator:
                 logger.error(f"Error en traducción Online: {e}")
                 return text
                 
-        # Modo Local (Bypass)
+        # Modo Local (Bypass) — sin locks globales para permitir concurrencia.
+        # CTranslate2 es thread-safe y SentencePiece es per-thread.
         if not self._initialized: return text
-        with self._lock:
-            # Traducción directa
-            if (from_code, to_code) in self._installed_pairs:
-                return self._translate_direct(text, from_code, to_code)
-            
-            # Traducción puente (pivot)
-            if (from_code, "en") in self._installed_pairs and ("en", to_code) in self._installed_pairs:
-                text_en = self._translate_direct(text, from_code, "en")
-                return self._translate_direct(text_en, "en", to_code)
-                
-            return text
+        # Traducción directa
+        if (from_code, to_code) in self._installed_pairs:
+            return self._translate_direct(text, from_code, to_code)
+        
+        # Traducción puente (pivot)
+        if (from_code, "en") in self._installed_pairs and ("en", to_code) in self._installed_pairs:
+            text_en = self._translate_direct(text, from_code, "en")
+            return self._translate_direct(text_en, "en", to_code)
+        
+        return text
 
     def download_model(self, from_code, to_code, progress_callback=None):
         try:
@@ -318,7 +345,8 @@ class Translator:
             for path in paths_to_delete:
                 shutil.rmtree(path)
                 
-            self._loaded_models.pop(f"{from_code}_{to_code}", None)
+            self._loaded_translators.pop(f"{from_code}_{to_code}", None)
+            self._model_paths.pop(f"{from_code}_{to_code}", None)
             self.refresh_languages()
             return True
         except: return False

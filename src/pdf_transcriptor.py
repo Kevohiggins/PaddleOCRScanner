@@ -14,6 +14,38 @@ from layout_engine import LayoutEngine
 from config import load_config
 from translator import translator_instance
 
+# Estado por hilo para engines de OCR/Layout/Tabla.
+# RapidOCR/RapidLayout/RapidTable NO se comparten entre hilos: cada worker crea los suyos.
+_worker_local = threading.local()
+
+
+def _get_worker_ocr(config):
+    ocr = getattr(_worker_local, "ocr", None)
+    if ocr is None:
+        ocr = OCREngine(config)
+        ocr.initialize()
+        _worker_local.ocr = ocr
+    return ocr
+
+
+def _get_worker_layout(config):
+    layout = getattr(_worker_local, "layout", None)
+    if layout is None:
+        layout = LayoutEngine(config)
+        layout.initialize()
+        _worker_local.layout = layout
+    return layout
+
+
+def _get_worker_table(config):
+    table = getattr(_worker_local, "table", None)
+    if table is None:
+        table = TableEngine(config)
+        table.initialize()
+        _worker_local.table = table
+    return table
+
+
 def reconstruct_text(elements):
     if not elements:
         return ""
@@ -132,8 +164,10 @@ class TranscriptorFrame(wx.Frame):
         self.chk_tables.SetValue(True)
         self.chk_page_breaks = wx.CheckBox(self.main_panel, label="Mantener saltos de página")
         self.chk_page_breaks.SetValue(True)
+        self.chk_fast_ocr = wx.CheckBox(self.main_panel, label="Modo rápido: OCR de página completa (sin análisis de layout, más veloz)")
         opt_sizer.Add(self.chk_tables, 0, wx.ALL, 5)
         opt_sizer.Add(self.chk_page_breaks, 0, wx.ALL, 5)
+        opt_sizer.Add(self.chk_fast_ocr, 0, wx.ALL, 5)
         content_sizer.Add(opt_sizer, 0, wx.EXPAND | wx.ALL, 10)
 
         # 3. Output Format
@@ -229,58 +263,91 @@ class TranscriptorFrame(wx.Frame):
 
             # --- FASE 1: EXTRACCIÓN ---
             self.Log("--- FASE 1: EXTRACCIÓN ---")
-            for i in range(total):
-                wx.CallAfter(self.gauge.SetValue, int(((i+1)/total)*100))
-                page = doc.load_page(i)
-                
-                page_data = {"page_num": i+1, "blocks": []} # blocks: [{'type': 'text'/'table', 'content': ...}]
-                
-                native_text = page.get_text("text").strip()
-                
-                if native_text and len(native_text) > 20:
-                    self.Log(f"Página {i+1}: Texto nativo detectado.")
-                    page_data["blocks"].append({"type": "text", "content": native_text})
-                else:
-                    self.Log(f"Página {i+1}: Imagen detectada. OCR...")
-                    if not self.ocr:
-                        self.ocr = OCREngine(self.config)
-                        self.ocr.initialize()
-                        
-                    if self.chk_tables.GetValue() and not self.layout:
-                        self.layout = LayoutEngine(self.config)
-                        self.layout.initialize()
-                        self.table = TableEngine(self.config)
-                        self.table.initialize()
-                        
-                    pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))
+            # Capturamos valores de la GUI antes de lanzar hilos (wx no es thread-safe)
+            do_tables = self.chk_tables.GetValue()
+            fast_ocr = self.chk_fast_ocr.GetValue()
+            scale = float(eff_config.get("image_scale", 0.5))
+            # Zoom de render según image_scale: evita renderizar a 2x/4x innecesarios.
+            # Efectiva = zoom * scale = max(1.0, scale) -> calidad >= página original.
+            zoom = min(max(1.0, scale) / scale if scale > 0 else 2.0, 2.5)
+            zoom_matrix = fitz.Matrix(zoom, zoom)
+            parallel = max(1, int(eff_config.get("ocr_parallel_pages", 4)))
+
+            def extract_page(i, shared_doc=None):
+                page_num = i + 1
+                page_data = {"page_num": page_num, "blocks": []}
+                doc_local = shared_doc
+                if doc_local is None:
+                    doc_local = fitz.open(path)
+                try:
+                    page = doc_local.load_page(i)
+                    native_text = page.get_text("text").strip()
+                    if native_text and len(native_text) > 20:
+                        page_data["blocks"].append({"type": "text", "content": native_text})
+                        return page_data
+                    self.Log(f"Página {page_num}: Imagen detectada. OCR...")
+                    ocr = _get_worker_ocr(eff_config)
+                    if do_tables and not fast_ocr:
+                        layout = _get_worker_layout(eff_config)
+                        table = _get_worker_table(eff_config)
+                    pix = page.get_pixmap(matrix=zoom_matrix)
                     img = np.frombuffer(pix.samples, dtype=np.uint8).reshape(pix.h, pix.w, pix.n)
                     img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR if pix.n == 3 else cv2.COLOR_RGBA2BGR)
-                    
-                    if self.chk_tables.GetValue() and self.layout:
-                        regions = self.layout.analyze_page(img)
+
+                    if fast_ocr:
+                        # Modo rápido: OCR de página completa en una sola pasada
+                        elements = ocr.scan_image(img)
+                        text_page = reconstruct_text(elements)
+                        if text_page.strip():
+                            page_data["blocks"].append({"type": "text", "content": text_page})
+                    elif do_tables:
+                        regions = layout.analyze_page(img)
                         for reg in regions:
                             x1, y1, x2, y2 = [int(v) for v in reg['bbox']]
                             x1, y1 = max(0, x1), max(0, y1)
                             x2, y2 = min(img.shape[1], x2), min(img.shape[0], y2)
                             region_img = img[y1:y2, x1:x2]
                             if region_img.size == 0: continue
-                            
                             if reg['type'] == 'table':
-                                html = self.table.process_table_region(region_img)
-                                matrix = self.table.html_to_matrix(html)
+                                html = table.process_table_region(region_img)
+                                matrix = table.html_to_matrix(html)
                                 if matrix:
                                     page_data["blocks"].append({"type": "table", "content": matrix})
                             else:
-                                elements = self.ocr.scan_image(region_img)
+                                elements = ocr.scan_image(region_img)
                                 text_block = reconstruct_text(elements)
                                 if text_block.strip():
                                     page_data["blocks"].append({"type": "text", "content": text_block})
                     else:
-                        elements = self.ocr.scan_image(img)
+                        elements = ocr.scan_image(img)
                         text_page = reconstruct_text(elements)
                         if text_page.strip():
                             page_data["blocks"].append({"type": "text", "content": text_page})
-                            
+                    return page_data
+                finally:
+                    if shared_doc is None:
+                        doc_local.close()
+
+            if parallel > 1 and total > 1:
+                self.Log(f"Extrayendo con hasta {parallel} páginas en paralelo...")
+                results = [None] * total
+                with concurrent.futures.ThreadPoolExecutor(max_workers=parallel) as executor:
+                    futures = {executor.submit(extract_page, i): i for i in range(total)}
+                    for future in concurrent.futures.as_completed(futures):
+                        i = futures[future]
+                        results[i] = future.result()
+                        wx.CallAfter(self.gauge.SetValue, int(((i + 1) / total) * 100))
+                extracted_pages = results
+            else:
+                self.Log("Extrayendo páginas secuencialmente...")
+                for i in range(total):
+                    wx.CallAfter(self.gauge.SetValue, int(((i + 1) / total) * 100))
+                    extracted_pages.append(extract_page(i, shared_doc=doc))
+
+            extracted_pages.sort(key=lambda p: p["page_num"])
+
+            # Carry-over: post-proceso secuencial (depende de la página anterior)
+            for page_data in extracted_pages:
                 # Procesar carry over de la página anterior
                 if carry_over:
                     first_text = next((b for b in page_data["blocks"] if b["type"] == "text"), None)
@@ -296,7 +363,6 @@ class TranscriptorFrame(wx.Frame):
                     last_block = page_data["blocks"][-1]
                     if last_block["type"] == "text":
                         content = last_block["content"].strip()
-                        # Si no termina en un signo de puntuación de cierre
                         if content and not content[-1] in ".!?:\"'”)]>":
                             import re
                             matches = list(re.finditer(r'[.!?:]+(?=\s|$|\n)', content))
@@ -307,8 +373,6 @@ class TranscriptorFrame(wx.Frame):
                             else:
                                 carry_over = content
                                 page_data["blocks"].pop()
-
-                extracted_pages.append(page_data)
 
             # Si sobró algo en la última página, lo devolvemos
             if carry_over and extracted_pages:
@@ -359,7 +423,7 @@ class TranscriptorFrame(wx.Frame):
                             
                     return p_data
 
-                if t_type == "online" and parallel_pages > 1:
+                if parallel_pages > 1:
                     self.Log(f"Traduciendo con {parallel_pages} páginas en paralelo...")
                     with concurrent.futures.ThreadPoolExecutor(max_workers=parallel_pages) as executor:
                         futures = [executor.submit(translate_page, p) for p in extracted_pages]
@@ -367,7 +431,7 @@ class TranscriptorFrame(wx.Frame):
                             extracted_pages[i] = future.result()
                             wx.CallAfter(self.gauge.SetValue, int(((i+1)/total)*100))
                 else:
-                    self.Log("Traduciendo páginas secuencialmente (Aceleración Lotes Offline activa)...")
+                    self.Log("Traduciendo páginas secuencialmente...")
                     for i, p in enumerate(extracted_pages):
                         extracted_pages[i] = translate_page(p)
                         wx.CallAfter(self.gauge.SetValue, int(((i+1)/total)*100))

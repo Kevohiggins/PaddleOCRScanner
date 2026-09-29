@@ -7,10 +7,18 @@ import logging
 import os
 from dataclasses import dataclass
 
+import cv2
 import numpy as np
+
+from config import DEFAULT_CONFIG
 
 
 logger = logging.getLogger(__name__)
+
+
+def _scale_default():
+    """Valor canónico de escala de imagen (fuente de verdad: config.DEFAULT_CONFIG)."""
+    return float(DEFAULT_CONFIG["global"].get("image_scale", 0.5))
 
 
 @dataclass
@@ -33,6 +41,10 @@ class OCREngine:
     def __init__(self, config: dict):
         self.config = config
         self._ocr = None
+        # Cache de mejoras de imagen (se recrean en cada scan hoy)
+        self._clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+        self._sharpen_kernel = np.array([[-1, -1, -1], [-1, 9, -1], [-1, -1, -1]])
+        self._dilate_kernel = np.ones((2, 2), np.uint8)
 
     def initialize(self):
         """
@@ -80,7 +92,6 @@ class OCREngine:
         
         # Detectores
         det_model_path_v3 = os.path.join(models_root, "detection_v3", "det.xml")
-        det_model_path_v5 = os.path.join(models_root, "detection_v5", "det.xml")
         
         # LÓGICA INTELIGENTE:
         # 1. Obtenemos el ancho de pantalla para saber con qué trabajamos.
@@ -90,7 +101,7 @@ class OCREngine:
         except Exception:
             screen_w = 1920
             
-        scale_val = float(self.config.get("image_scale", 1.0))
+        scale_val = float(self.config.get("image_scale", _scale_default()))
         
         # 2. Definimos PISOS de calidad según la escala seleccionada
         if scale_val >= 2.0:    # Ultra
@@ -159,9 +170,8 @@ class OCREngine:
         if self._ocr is None:
             raise RuntimeError("OCREngine no inicializado. Llamá a initialize() primero.")
 
-        import cv2
         scale_val = self.config.get("image_scale")
-        scale_factor = float(scale_val) if scale_val is not None else 1.0
+        scale_factor = float(scale_val) if scale_val is not None else _scale_default()
         original_h, original_w = image.shape[:2]
         
         if scale_factor != 1.0 and scale_factor > 0:
@@ -190,13 +200,11 @@ class OCREngine:
 
             # 2. Enfoque (Sharpening)
             if self.config.get("use_sharpening", False):
-                kernel = np.array([[-1,-1,-1], [-1,9,-1], [-1,-1,-1]])
-                process_image = cv2.filter2D(process_image, -1, kernel)
+                process_image = cv2.filter2D(process_image, -1, self._sharpen_kernel)
 
             # 3. Contraste (CLAHE)
             if self.config.get("use_clahe", False):
-                clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
-                process_image = clahe.apply(process_image)
+                process_image = self._clahe.apply(process_image)
 
             # 4. Binarización (Blanco y Negro puro)
             if self.config.get("use_binarization", False):
@@ -204,8 +212,7 @@ class OCREngine:
 
             # 5. Engrosar letras (Dilatación)
             if self.config.get("use_dilation", False):
-                kernel = np.ones((2,2), np.uint8)
-                process_image = cv2.dilate(process_image, kernel, iterations=1)
+                process_image = cv2.dilate(process_image, self._dilate_kernel, iterations=1)
 
             # 6. Devolver a 3 canales falsos (RapidOCR exige array 3D)
             if len(process_image.shape) == 2:
