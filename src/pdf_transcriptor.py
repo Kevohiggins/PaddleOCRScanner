@@ -5,8 +5,6 @@ import time
 import fitz  # PyMuPDF
 import numpy as np
 import cv2
-from docx import Document
-import pandas as pd
 
 from ocr_engine import OCREngine
 from table_engine import TableEngine
@@ -256,6 +254,7 @@ class TranscriptorFrame(wx.Frame):
             
             word_doc = None
             if output_type == "docx":
+                from docx import Document
                 word_doc = Document()
             
             extracted_pages = []
@@ -273,12 +272,23 @@ class TranscriptorFrame(wx.Frame):
             zoom_matrix = fitz.Matrix(zoom, zoom)
             parallel = max(1, int(eff_config.get("ocr_parallel_pages", 4)))
 
+            opened_worker_docs = []
+            worker_docs_lock = threading.Lock()
+
+            def _get_worker_doc():
+                d = getattr(_worker_local, "fitz_doc", None)
+                if d is None or getattr(_worker_local, "fitz_path", None) != path:
+                    d = fitz.open(path)
+                    _worker_local.fitz_doc = d
+                    _worker_local.fitz_path = path
+                    with worker_docs_lock:
+                        opened_worker_docs.append(d)
+                return d
+
             def extract_page(i, shared_doc=None):
                 page_num = i + 1
                 page_data = {"page_num": page_num, "blocks": []}
-                doc_local = shared_doc
-                if doc_local is None:
-                    doc_local = fitz.open(path)
+                doc_local = shared_doc if shared_doc is not None else _get_worker_doc()
                 try:
                     page = doc_local.load_page(i)
                     native_text = page.get_text("text").strip()
@@ -325,18 +335,26 @@ class TranscriptorFrame(wx.Frame):
                             page_data["blocks"].append({"type": "text", "content": text_page})
                     return page_data
                 finally:
-                    if shared_doc is None:
-                        doc_local.close()
+                    pass
 
             if parallel > 1 and total > 1:
                 self.Log(f"Extrayendo con hasta {parallel} páginas en paralelo...")
                 results = [None] * total
-                with concurrent.futures.ThreadPoolExecutor(max_workers=parallel) as executor:
-                    futures = {executor.submit(extract_page, i): i for i in range(total)}
-                    for future in concurrent.futures.as_completed(futures):
-                        i = futures[future]
-                        results[i] = future.result()
-                        wx.CallAfter(self.gauge.SetValue, int(((i + 1) / total) * 100))
+                completed = 0
+                try:
+                    with concurrent.futures.ThreadPoolExecutor(max_workers=parallel) as executor:
+                        futures = {executor.submit(extract_page, i): i for i in range(total)}
+                        for future in concurrent.futures.as_completed(futures):
+                            i = futures[future]
+                            results[i] = future.result()
+                            completed += 1
+                            wx.CallAfter(self.gauge.SetValue, int((completed / total) * 100))
+                finally:
+                    for wd in opened_worker_docs:
+                        try:
+                            wd.close()
+                        except Exception:
+                            pass
                 extracted_pages = results
             else:
                 self.Log("Extrayendo páginas secuencialmente...")
@@ -494,6 +512,7 @@ class TranscriptorFrame(wx.Frame):
             if output_type == "docx":
                 word_doc.save(output_path)
             elif output_type == "xlsx":
+                import pandas as pd
                 pd.DataFrame(all_text_data).to_excel(output_path, index=False)
             else:
                 with open(output_path, "w", encoding="utf-8") as f:

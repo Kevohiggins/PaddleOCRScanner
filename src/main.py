@@ -24,7 +24,7 @@ from difflib import SequenceMatcher
 from config import load_config, save_config, CONFIG_FILE, get_effective_config, get_base_path, VERSION
 from tts_engine import TTSEngine
 from ocr_engine import OCREngine
-from screen_capture import capture_screen, capture_active_window
+from screen_capture import capture_screen, capture_active_window, is_black_frame, PersistentWGCCapture
 from navigator import ElementNavigator
 from shadow_manager import ShadowManager
 from translator import translator_instance
@@ -35,6 +35,18 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(name)s] %(levelna
 logger = logging.getLogger("main")
 
 MOD_MAP = {"ctrl": win32con.MOD_CONTROL, "alt": win32con.MOD_ALT, "shift": win32con.MOD_SHIFT, "win": win32con.MOD_WIN}
+DYNAMIC_LEVELS = {
+    10:  (7, 0.10, 600), # Nivel 1 (Mínima)
+    20:  (6, 0.15, 400), # Nivel 2
+    30:  (5, 0.25, 250), # Nivel 3
+    40:  (4, 0.35, 120), # Nivel 4
+    50:  (3, 0.50, 60),  # Nivel 5 (Medio)
+    60:  (2, 0.65, 30),  # Nivel 6
+    70:  (2, 0.75, 15),  # Nivel 7
+    80:  (1, 0.85, 8),   # Nivel 8
+    90:  (1, 0.95, 4),   # Nivel 9
+    100: (1, 0.99, 2)    # Nivel 10 (Máxima)
+}
 VK_MAP = {
     "enter": 0x0D, "esc": 0x1B, "space": 0x20, "tab": 0x09, "backspace": 0x08, "up": 0x26, "down": 0x28, "left": 0x25, "right": 0x27,
     "f1": 0x70, "f2": 0x71, "f3": 0x72, "f4": 0x73, "f5": 0x74, "f6": 0x75, "f7": 0x76, "f8": 0x77, "f9": 0x78, "f10": 0x79, "f11": 0x7A, "f12": 0x7B, "apps": 0x5D, "menu": 0x5D
@@ -219,7 +231,7 @@ class PaddleOCRScanner:
         
         needs_reinit = (
             new_config.get("ocr_language") != self.config.get("ocr_language") or 
-            new_config.get("use_gpu") != self.config.get("use_gpu") or
+            new_config.get("openvino_device") != self.config.get("openvino_device") or
             str(new_config.get("image_scale")) != str(self.config.get("image_scale"))
         )
         
@@ -291,7 +303,7 @@ class PaddleOCRScanner:
 
     def _on_scan_screen(self): 
         img, ox, oy = capture_screen()
-        if np.mean(img[::10, ::10]) < 0.1:
+        if is_black_frame(img):
             self.tts.play_error()
             self.tts.speak("Es necesario desactivar la cortina de pantalla antes de escanear.")
             self._release_modifiers()
@@ -302,7 +314,7 @@ class PaddleOCRScanner:
 
     def _on_scan_window(self): 
         img, ox, oy = capture_active_window()
-        if np.mean(img[::10, ::10]) < 0.1:
+        if is_black_frame(img):
             self.tts.play_error()
             self.tts.speak("Es necesario desactivar la cortina de pantalla antes de escanear.")
             self._release_modifiers()
@@ -324,7 +336,7 @@ class PaddleOCRScanner:
             self.is_dynamic_running = False; self.tts.play_error(); self.tts.speak("Escaneo dinámico detenido.")
         else:
             img, ox, oy = capture_active_window() if self.config.get("dynamic_target") == "window" else capture_screen()
-            if np.mean(img) < 0.1:
+            if is_black_frame(img):
                 self.tts.play_error()
                 self.tts.speak("Es necesario desactivar la cortina de pantalla antes de escanear.")
                 return
@@ -336,114 +348,135 @@ class PaddleOCRScanner:
         prev_text = ""
         prev_elements_texts = set()
         prev_small_img = None
-        while self.is_dynamic_running:
-            loop_start = time.time()
-            try:
-                self._update_profile()
-                img, ox, oy = capture_active_window() if self.config.get("dynamic_target") == "window" else capture_screen()
-                
-                if np.mean(img) < 0.1:
-                    time.sleep(1.0)
-                    continue
-
-                img, ox, oy = self._apply_crops(img, ox, oy)
-
-                # Atajo rápido: Comparación visual de píxeles activos en grises con OpenCV
-                sens_val = int(self.config.get("dynamic_sensitivity", 50))
-                
-                # OPTIMIZACIÓN: Miniatura rápida usando INTER_NEAREST y extracción de canal verde en memoria
-                small_img = cv2.resize(img, (128, 128), interpolation=cv2.INTER_NEAREST)
-                small_gray = small_img[:, :, 1]
-                
-                # Mapeo de los 10 niveles de sensibilidad calibrados quirúrgicamente
-                # Formato: (largo_minimo, text_threshold, changed_pixels_threshold)
-                LEVELS = {
-                    10:  (7, 0.10, 600), # Nivel 1 (Mínima)
-                    20:  (6, 0.15, 400), # Nivel 2
-                    30:  (5, 0.25, 250), # Nivel 3
-                    40:  (4, 0.35, 120), # Nivel 4
-                    50:  (3, 0.50, 60),  # Nivel 5 (Medio)
-                    60:  (2, 0.65, 30),  # Nivel 6
-                    70:  (2, 0.75, 15),  # Nivel 7
-                    80:  (1, 0.85, 8),   # Nivel 8
-                    90:  (1, 0.95, 4),   # Nivel 9
-                    100: (1, 0.99, 2)    # Nivel 10 (Máxima)
-                }
-                
-                level_key = min(LEVELS.keys(), key=lambda k: abs(k - sens_val))
-                min_len, threshold, pixel_threshold = LEVELS[level_key]
-
-                if prev_small_img is not None:
-                    # Calculamos diferencia absoluta en escala de grises
-                    diff = cv2.absdiff(small_gray, prev_small_img)
-                    # Contamos cuántos píxeles cambiaron su brillo en más de 15 unidades
-                    changed_pixels = np.sum(diff > 15)
+        wgc_session = PersistentWGCCapture(monitor_index=1)
+        wgc_active = wgc_session.start() if self.config.get("dynamic_target") != "window" else False
+        try:
+            while self.is_dynamic_running:
+                loop_start = time.time()
+                try:
+                    self._update_profile()
+                    if self.config.get("dynamic_target") == "window":
+                        img, ox, oy = capture_active_window()
+                    else:
+                        frame = wgc_session.get_frame() if wgc_active else None
+                        if frame is not None and not is_black_frame(frame):
+                            img, ox, oy = frame, 0, 0
+                        else:
+                            img, ox, oy = capture_screen()
                     
-                    if changed_pixels < pixel_threshold:
-                        elapsed = time.time() - loop_start
-                        remaining = max(0.1, float(self.config.get("dynamic_interval", 1.0)) - elapsed)
-                        time.sleep(remaining)
+                    if is_black_frame(img):
+                        time.sleep(1.0)
                         continue
-                
-                prev_small_img = small_gray.copy()
 
-                with self._scan_lock: elements = self.ocr.scan_image(img)
-                self._last_elements = elements
-                elements = self.shadow.filter_elements(elements)
+                    img, ox, oy = self._apply_crops(img, ox, oy)
 
-                if self.config.get("dynamic_diff_mode", False):
-                    # Modo Diferencial: memoria acumulativa
-                    current_texts = [e.text.strip() for e in elements if len(e.text.strip()) >= min_len]
-                    new_texts = []
+                    # Atajo rápido: Comparación visual de píxeles activos en grises con OpenCV
+                    sens_val = int(self.config.get("dynamic_sensitivity", 50))
                     
-                    for txt in current_texts:
-                        is_present = False
-                        # Comparamos contra lo que hay ACTUALMENTE en pantalla
-                        for seen in prev_elements_texts:
-                            if SequenceMatcher(None, txt.lower(), seen.lower()).ratio() >= threshold:
-                                is_present = True; break
+                    # OPTIMIZACIÓN: Miniatura rápida usando INTER_NEAREST y extracción de canal verde en memoria
+                    small_img = cv2.resize(img, (128, 128), interpolation=cv2.INTER_NEAREST)
+                    small_gray = small_img[:, :, 1]
+                    
+                    level_key = min(DYNAMIC_LEVELS.keys(), key=lambda k: abs(k - sens_val))
+                    min_len, threshold, pixel_threshold = DYNAMIC_LEVELS[level_key]
+
+                    roi_box = None
+                    if prev_small_img is not None:
+                        # Calculamos diferencia absoluta en escala de grises
+                        diff = cv2.absdiff(small_gray, prev_small_img)
+                        mask = diff > 15
+                        # Contamos cuántos píxeles cambiaron su brillo en más de 15 unidades
+                        changed_pixels = int(np.count_nonzero(mask))
                         
-                        if not is_present:
-                            new_texts.append(txt)
+                        if changed_pixels < pixel_threshold:
+                            elapsed = time.time() - loop_start
+                            remaining = max(0.1, float(self.config.get("dynamic_interval", 1.0)) - elapsed)
+                            time.sleep(remaining)
+                            continue
+
+                        if self.config.get("dynamic_diff_mode", False):
+                            ys, xs = np.nonzero(mask)
+                            if ys.size > 0:
+                                h_img, w_img = img.shape[:2]
+                                rx1 = max(0, int(xs.min() * w_img / 128) - 48)
+                                ry1 = max(0, int(ys.min() * h_img / 128) - 32)
+                                rx2 = min(w_img, int((xs.max() + 1) * w_img / 128) + 48)
+                                ry2 = min(h_img, int((ys.max() + 1) * h_img / 128) + 32)
+                                if (rx2 - rx1) * (ry2 - ry1) < 0.6 * (w_img * h_img):
+                                    roi_box = (rx1, ry1, rx2, ry2)
                     
-                    # Actualizamos la memoria: Solo lo que está presente AHORA
-                    prev_elements_texts = set(current_texts)
-                    
-                    if new_texts:
-                        new_text = " ".join(new_texts)
-                        if self.config.get("translate_enabled"):
-                            from_code = self.config.get("translate_from", "en")
-                            to_code = self.config.get("translate_to", "es")
-                            new_text = translator_instance.translate(
-                                new_text, from_code, to_code, 
-                                translate_type=self.config.get("translate_type", "disabled"),
-                                service=self.config.get("translate_service", "google"),
-                                swap=self.config.get("translate_swap", False)
-                            )
-                        self.tts.speak(new_text, interrupt=self.config.get("dynamic_interrupt", False))
-                else:
-                    # Modo clásico: se resetea la memoria diferencial para que no interfiera
-                    prev_elements_texts.clear()
-                    filtered_elements = [e for e in elements if len(e.text.strip()) >= min_len]
-                    full_text = " ".join([e.text for e in filtered_elements]).strip()
-                    if full_text and SequenceMatcher(None, prev_text, full_text).ratio() < threshold:
-                        prev_text = full_text
-                        if self.config.get("translate_enabled"):
-                            from_code = self.config.get("translate_from", "en")
-                            to_code = self.config.get("translate_to", "es")
-                            full_text = translator_instance.translate(
-                                full_text, from_code, to_code, 
-                                translate_type=self.config.get("translate_type", "disabled"),
-                                service=self.config.get("translate_service", "google"),
-                                swap=self.config.get("translate_swap", False)
-                            )
-                        self.tts.speak(full_text, interrupt=self.config.get("dynamic_interrupt", False))
-            except Exception as e: logger.error(f"Error dinámico: {e}")
+                    prev_small_img = small_gray
+
+                    if roi_box is not None:
+                        rx1, ry1, rx2, ry2 = roi_box
+                        with self._scan_lock:
+                            elements = self.ocr.scan_image(img[ry1:ry2, rx1:rx2])
+                        for el in elements:
+                            el.x += rx1
+                            el.y += ry1
+                            el.center_x += rx1
+                            el.center_y += ry1
+                            el.bbox = [[p[0] + rx1, p[1] + ry1] for p in el.bbox]
+                    else:
+                        with self._scan_lock: elements = self.ocr.scan_image(img)
+                    self._last_elements = elements
+                    elements = self.shadow.filter_elements(elements)
+
+                    if self.config.get("dynamic_diff_mode", False):
+                        # Modo Diferencial: memoria acumulativa
+                        current_texts = [e.text.strip() for e in elements if len(e.text.strip()) >= min_len]
+                        new_texts = []
+                        
+                        for txt in current_texts:
+                            is_present = False
+                            # Comparamos contra lo que hay ACTUALMENTE en pantalla
+                            for seen in prev_elements_texts:
+                                if SequenceMatcher(None, txt.lower(), seen.lower()).ratio() >= threshold:
+                                    is_present = True; break
+                            
+                            if not is_present:
+                                new_texts.append(txt)
+                        
+                        # Actualizamos la memoria: Solo lo que está presente AHORA
+                        prev_elements_texts = set(current_texts)
+                        
+                        if new_texts:
+                            new_text = " ".join(new_texts)
+                            if self.config.get("translate_enabled"):
+                                from_code = self.config.get("translate_from", "en")
+                                to_code = self.config.get("translate_to", "es")
+                                new_text = translator_instance.translate(
+                                    new_text, from_code, to_code, 
+                                    translate_type=self.config.get("translate_type", "disabled"),
+                                    service=self.config.get("translate_service", "google"),
+                                    swap=self.config.get("translate_swap", False)
+                                )
+                            self.tts.speak(new_text, interrupt=self.config.get("dynamic_interrupt", False))
+                    else:
+                        # Modo clásico: se resetea la memoria diferencial para que no interfiera
+                        prev_elements_texts.clear()
+                        filtered_elements = [e for e in elements if len(e.text.strip()) >= min_len]
+                        full_text = " ".join([e.text for e in filtered_elements]).strip()
+                        if full_text and SequenceMatcher(None, prev_text, full_text).ratio() < threshold:
+                            prev_text = full_text
+                            if self.config.get("translate_enabled"):
+                                from_code = self.config.get("translate_from", "en")
+                                to_code = self.config.get("translate_to", "es")
+                                full_text = translator_instance.translate(
+                                    full_text, from_code, to_code, 
+                                    translate_type=self.config.get("translate_type", "disabled"),
+                                    service=self.config.get("translate_service", "google"),
+                                    swap=self.config.get("translate_swap", False)
+                                )
+                            self.tts.speak(full_text, interrupt=self.config.get("dynamic_interrupt", False))
+                except Exception as e: logger.error(f"Error dinámico: {e}")
             
-            # Sleep compensado: descuenta el tiempo que tardó el procesamiento
-            elapsed = time.time() - loop_start
-            remaining = max(0, float(self.config.get("dynamic_interval", 1.0)) - elapsed)
-            time.sleep(remaining)
+                # Sleep compensado: descuenta el tiempo que tardó el procesamiento
+                elapsed = time.time() - loop_start
+                remaining = max(0, float(self.config.get("dynamic_interval", 1.0)) - elapsed)
+                time.sleep(remaining)
+        finally:
+            wgc_session.stop()
 
     def _start_scan(self, mode, img_data=None):
         if self._scan_lock.locked():
@@ -459,7 +492,7 @@ class PaddleOCRScanner:
                     img, ox, oy = img_data
                 else:
                     img, ox, oy = capture_active_window() if mode == "window" else capture_screen()
-                    if np.mean(img) < 0.1:
+                    if is_black_frame(img):
                         self.tts.play_error()
                         self.tts.speak("Es necesario desactivar la cortina de pantalla antes de escanear.")
                         return

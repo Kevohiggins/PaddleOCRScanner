@@ -24,6 +24,7 @@ datas += collect_data_files('sentencepiece')
 # 2. BINARIOS (DLLs y archivos de sistema)
 # OpenVINO necesita sus librerías dinámicas para la aceleración por hardware
 binaries = collect_dynamic_libs('openvino')
+binaries += collect_dynamic_libs('windows_capture')
 
 # CTranslate2 (Motor de Traducción): 
 # Necesitamos copiar sus DLLs manualmente a su carpeta interna para que Python las encuentre
@@ -59,12 +60,13 @@ a = Analysis(
         'pandas',               # Exportación a Excel
         'openpyxl',             # Requisito de pandas para Excel
         'bs4',                  # BeautifulSoup para parsear tablas
+        'windows_capture',      # Windows Graphics Capture (WGC)
     ],
     # runtime_hook gestiona las rutas de las DLLs cuando el EXE se está ejecutando
     runtime_hooks=['runtime_hook_openvino.py'],
     excludes=[
         # Excluimos librerías pesadas que PyInstaller intenta meter por error
-        'scipy', 'matplotlib', 'tkinter', 
+        'scipy', 'matplotlib', 'tkinter', 'nncf', 
         'notebook', 'ipython', 'PyQt5', 'PySide2', 'PySide6',
         'torch', 'tensorboard', 'unittest'
     ],

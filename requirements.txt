@@ -18,4 +18,5 @@ pandas
 beautifulsoup4
 rapid-table
 rapid-layout
+windows-capture
 

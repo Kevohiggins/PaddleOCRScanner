@@ -85,6 +85,7 @@ class OCREngine:
             base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         
         models_root = os.path.join(base_dir, "models", "v5_ov")
+        os.environ.setdefault("OV_CACHE_DIR", os.path.join(base_dir, ".ov_cache"))
         
         # Rutas de modelos específicos
         rec_model_path = os.path.join(models_root, target_folder, "rec.xml")

@@ -30,21 +30,26 @@ class TTSEngine:
             base_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         
         self.sounds_path = os.path.join(base_path, "src", "assets", "sounds")
+        self._sound_files = {}
+        if os.path.isdir(self.sounds_path):
+            for fname in os.listdir(self.sounds_path):
+                if fname.lower().endswith(".wav"):
+                    self._sound_files[fname] = os.path.join(self.sounds_path, fname)
         logger.info("TTS: Ruta de sonidos configurada en %s", self.sounds_path)
 
     def _play_file(self, filename):
-        """Reproduce un archivo WAV de la carpeta de assets."""
-        def _play():
+        """Reproduce un archivo WAV de la carpeta de assets de forma asíncrona."""
+        path = self._sound_files.get(filename)
+        if not path:
             path = os.path.join(self.sounds_path, filename)
-            if os.path.exists(path):
-                try:
-                    winsound.PlaySound(path, winsound.SND_FILENAME | winsound.SND_ASYNC)
-                except Exception as e:
-                    logger.error("Error al reproducir sonido %s: %s", filename, e)
-            else:
+            if not os.path.exists(path):
                 logger.warning("Sonido no encontrado: %s", path)
-        
-        threading.Thread(target=_play, daemon=True).start()
+                return
+            self._sound_files[filename] = path
+        try:
+            winsound.PlaySound(path, winsound.SND_FILENAME | winsound.SND_ASYNC)
+        except Exception as e:
+            logger.error("Error al reproducir sonido %s: %s", filename, e)
 
     def play_startup(self):
         """Sonido de bienvenida al iniciar el programa."""

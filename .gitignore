@@ -9,6 +9,8 @@ models/
 # Compilación y empaquetado
 build/
 dist/
+update_pkg/
+*.zip
 *.spec.bak
 
 # Bytecode y cache de Python
@@ -16,6 +18,7 @@ __pycache__/
 *.py[cod]
 *$py.class
 src/__pycache__/
+.ov_cache/
 
 # Logs y temporales
 *.log

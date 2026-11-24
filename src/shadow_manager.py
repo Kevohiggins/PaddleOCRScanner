@@ -11,7 +11,14 @@ class ShadowManager:
         self.is_enabled = True
         self.current_app = "Global"
         self.profiles = {"Global": {"regions": [], "texts": []}}
+        self._text_sets = {"Global": set()}
         self.load()
+
+    def _rebuild_text_sets(self):
+        self._text_sets = {
+            p: set(data.get("texts", []))
+            for p, data in self.profiles.items()
+        }
 
     def load(self):
         if self.config_path and os.path.exists(self.config_path):
@@ -21,6 +28,7 @@ class ShadowManager:
                     self.profiles = data.get("shadow_profiles", {"Global": {"regions": [], "texts": []}})
                 if "Global" not in self.profiles: self.profiles["Global"] = {"regions": [], "texts": []}
             except: pass
+        self._rebuild_text_sets()
 
     def save(self):
         if not self.config_path: return
@@ -77,11 +85,16 @@ class ShadowManager:
         if not text or len(text) < 2: return False
         prof = self.profiles.get(self.current_app, self.profiles["Global"])
         txt = text.strip().lower()
-        if txt not in prof["texts"]: prof["texts"].append(txt); return True
+        tset = self._text_sets.setdefault(self.current_app, set(prof.get("texts", [])))
+        if txt not in tset:
+            tset.add(txt)
+            prof["texts"].append(txt)
+            return True
         return False
 
     def clear(self):
         if self.current_app in self.profiles: self.profiles[self.current_app] = {"regions": [], "texts": []}
+        self._text_sets[self.current_app] = set()
         self.save()
 
     def toggle(self):
@@ -116,7 +129,7 @@ class ShadowManager:
         txt = element.text.strip().lower()
         rect = [element.x, element.y, element.w, element.h]
         for p in ["Global", self.current_app]:
-            if txt in self.profiles.get(p, {}).get("texts", []): return True
+            if txt in self._text_sets.get(p, ()): return True
             for sr in self.profiles.get(p, {}).get("regions", []):
                 if self._calculate_overlap_with_grace(rect, sr) > 0.6: return True
         return False

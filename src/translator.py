@@ -9,9 +9,6 @@ import zipfile
 import shutil
 import time
 
-import ctranslate2
-import sentencepiece as spm
-
 logger = logging.getLogger("TranslatorMETA")
 logger.setLevel(logging.INFO)
 
@@ -163,6 +160,7 @@ class Translator:
                 if ct2_dir is None:
                     return None, None
                 try:
+                    import ctranslate2
                     translator = ctranslate2.Translator(ct2_dir, device="cpu", compute_type="int8")
                     self._loaded_translators[pair_key] = translator
                 except Exception as e:
@@ -191,6 +189,7 @@ class Translator:
             self._thread_local_sp.cache = cache
         if pair_key not in cache:
             try:
+                import sentencepiece as spm
                 cache[pair_key] = spm.SentencePieceProcessor(model_file=sp_path)
             except Exception as e:
                 logger.error(f"Error cargando SentencePiece ({pair_key}): {e}")

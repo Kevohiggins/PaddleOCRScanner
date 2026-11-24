@@ -72,6 +72,7 @@ class ElementNavigator:
         self.tts = tts; self.config = config; self.offset_x = offset_x; self.offset_y = offset_y
         self.rescan_callback = rescan_callback
         self.elements = []; self.index = -1; self.word_index = -1; self._hook = None; self._running = False
+        self._thread_id = None
         self._hotkey_actions = {}
 
     def _precompute_hotkeys(self):
@@ -87,6 +88,7 @@ class ElementNavigator:
             "key_first":  ("home", self._on_first),
             "key_last":   ("end", self._on_last),
             "key_skip_prev": ("left", lambda: self._on_skip(-5)),
+            "key_skip_next": ("right", lambda: self._on_skip(5)),
             "key_repeat": ("space", self._on_repeat),
             "key_word_next": ("ctrl+right", self._on_word_next),
             "key_word_prev": ("ctrl+left", self._on_word_prev)
@@ -110,24 +112,20 @@ class ElementNavigator:
         # Auto-anunciar el primer elemento para confirmar que la navegación inició
         self._on_next()
 
+        self._thread_id = kernel32.GetCurrentThreadId()
         msg = ctypes.wintypes.MSG()
-        while self._running:
-            # PeekMessageW permite revisar la cola sin bloquearse infinitamente
-            # y sin depender exclusivamente de GetMessageW que puede tragarse WM_QUITs ajenos
-            if user32.PeekMessageW(ctypes.byref(msg), 0, 0, 0, 1): # 1 = PM_REMOVE
-                if msg.message == 0x0012: # WM_QUIT
-                    break
-                user32.TranslateMessage(ctypes.byref(msg))
-                user32.DispatchMessageW(ctypes.byref(msg))
-            else:
-                # Pequeña espera para no quemar CPU en el bucle de mensajes
-                time.sleep(0.01)
+        while self._running and user32.GetMessageW(ctypes.byref(msg), 0, 0, 0) > 0:
+            user32.TranslateMessage(ctypes.byref(msg))
+            user32.DispatchMessageW(ctypes.byref(msg))
+        self._thread_id = None
 
     def _stop(self):
         self._running = False
         if self._hook: 
             user32.UnhookWindowsHookEx(self._hook)
             self._hook = None
+        if self._thread_id:
+            user32.PostThreadMessageW(self._thread_id, 0x0012, 0, 0)
 
     def _get_current_mask(self):
         mask = 0

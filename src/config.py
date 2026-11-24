@@ -11,7 +11,7 @@ def get_base_path():
     return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 CONFIG_FILE = os.path.join(get_base_path(), "config.json")
-VERSION = "2.0"
+VERSION = "2.1"
 
 DEFAULT_CONFIG = {
     "global": {
